@@ -68,6 +68,7 @@ async def root():
             "stats": "/api/v1/stats",
             "filters": "/api/v1/filters",
             "export": "/api/v1/export",
+            "bulk_export": "/api/v1/export/bulk",
         },
     }
 

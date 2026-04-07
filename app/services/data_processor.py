@@ -2,8 +2,9 @@
 
 import io
 import json
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 

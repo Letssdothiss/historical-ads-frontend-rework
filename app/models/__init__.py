@@ -1,14 +1,14 @@
 """Models module"""
 
-from .schemas import SearchQuery, ExportQuery, ExportFormat
 from .responses import (
+    ErrorResponse,
+    FiltersResult,
+    HealthResponse,
     JobAd,
     SearchResult,
     StatsResult,
-    FiltersResult,
-    HealthResponse,
-    ErrorResponse,
 )
+from .schemas import ExportFormat, ExportQuery, SearchQuery
 
 __all__ = [
     "SearchQuery",

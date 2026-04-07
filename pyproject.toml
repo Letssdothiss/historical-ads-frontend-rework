@@ -13,6 +13,11 @@ extend-select = [
 
 ignore = [
   "E501", # line length
+  "B008", # Often false positives in FastAPI projects.
+]
+
+unfixable = [
+  "F401" # Unused Imports
 ]
 
 [tool.ruff.format]

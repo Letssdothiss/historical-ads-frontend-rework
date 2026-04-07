@@ -1,12 +1,12 @@
 """Metadata routes for database and ad quality information"""
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 
-from app.services import get_api, get_processor, HistoricalAdsAPI, DataProcessor
 from app.models.schemas import AdQualityMetadata, DatabaseMetadata
+from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Metadata"])

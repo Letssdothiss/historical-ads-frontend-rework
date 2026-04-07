@@ -1,9 +1,10 @@
 """Filters routes"""
 
-from typing import Dict, Any
+from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, Request
 
-from app.services import get_api, get_processor, HistoricalAdsAPI, DataProcessor
+from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 
 router = APIRouter(tags=["Filters"])
 

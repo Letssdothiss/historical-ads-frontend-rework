@@ -1,11 +1,12 @@
 """External API client"""
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 import httpx
 
 from app.utils.config import settings
-from app.utils.errors import ExternalAPIError, NotFoundError, ConflictError, TimeoutError
+from app.utils.errors import ConflictError, ExternalAPIError, NotFoundError, TimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,10 @@ class HistoricalAdsAPI:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url, params=params)
                 return self._handle_response(response)
-        except httpx.TimeoutException:
-            raise TimeoutError("API request timed out")
+        except httpx.TimeoutException as e:
+            raise TimeoutError("API request timed out") from e
         except httpx.ConnectError as e:
-            raise ExternalAPIError(f"Failed to connect: {e}")
+            raise ExternalAPIError(f"Failed to connect: {e}") from e
 
     async def get_ad(self, ad_id: str) -> Dict[str, Any]:
         """Get job ad by ID"""
@@ -42,10 +43,10 @@ class HistoricalAdsAPI:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url)
                 return self._handle_response(response)
-        except httpx.TimeoutException:
-            raise TimeoutError("API request timed out")
-        except httpx.ConnectError:
-            raise ExternalAPIError("Failed to connect")
+        except httpx.TimeoutException as e:
+            raise TimeoutError("API request timed out") from e
+        except httpx.ConnectError as e:
+            raise ExternalAPIError("Failed to connect") from e
 
     async def get_stats(self, **filters: Any) -> Dict[str, Any]:
         """Get statistics"""
@@ -59,10 +60,10 @@ class HistoricalAdsAPI:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url, params=params)
                 return self._handle_response(response)
-        except httpx.TimeoutException:
-            raise TimeoutError("API request timed out")
-        except httpx.ConnectError:
-            raise ExternalAPIError("Failed to connect")
+        except httpx.TimeoutException as e:
+            raise TimeoutError("API request timed out") from e
+        except httpx.ConnectError as e:
+            raise ExternalAPIError("Failed to connect") from e
 
     def _handle_response(self, response: httpx.Response) -> Dict[str, Any]:
         """Handle API response"""

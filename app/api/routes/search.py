@@ -4,9 +4,9 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Request, Query
+from fastapi import APIRouter, Depends, Query, Request
 
-from app.services import get_api, get_processor, HistoricalAdsAPI, DataProcessor
+from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])

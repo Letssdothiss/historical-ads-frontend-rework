@@ -4,16 +4,18 @@ FastAPI backend for searching and analyzing historical job listings from the Swe
 
 ## API Endpoints
 
-| Endpoint                 | Metod | Beskrivning                                            |
-| ------------------------ | ----- | ------------------------------------------------------ |
-| `/api/v1/search`         | GET   | Search historical job listings                         |
-| `/api/v1/search/ad/{id}` | GET   | Retrieve a specific listing                            |
-| `/api/v1/stats`          | GET   | Get statistics with dynamic query params               |
-| `/api/v1/filters`        | GET   | Retrieve all dynamic filter options                    |
-| `/api/v1/filters/{name}` | GET   | Retrieve a single filter group by name                 |
-| `/api/v1/export`         | GET   | Export data (JSON/CSV/XLSX)                            |
-| `/api/v1/export/bulk`    | GET   | Export matching ads as a ZIP file with split CSV parts |
-| `/health`                | GET   | Health check                                           |
+| Endpoint                   | Metod | Beskrivning                                                |
+| -------------------------- | ----- | ---------------------------------------------------------- |
+| `/api/v1/search`           | GET   | Search historical job listings                             |
+| `/api/v1/search/ad/{id}`   | GET   | Retrieve a specific listing with optional quality metadata |
+| `/api/v1/stats`            | GET   | Get statistics with dynamic query params                   |
+| `/api/v1/filters`          | GET   | Retrieve all dynamic filter options                        |
+| `/api/v1/filters/{name}`   | GET   | Retrieve a single filter group by name                     |
+| `/api/v1/export`           | GET   | Export data (JSON/CSV/XLSX)                                |
+| `/api/v1/export/bulk`      | GET   | Export matching ads as a ZIP file with split CSV parts     |
+| `/api/v1/metadata`         | GET   | Get overall database quality and structure metadata        |
+| `/api/v1/metadata/ad/{id}` | GET   | Get quality metadata for a specific ad                     |
+| `/health`                  | GET   | Health check                                               |
 
 ## Getting Started
 
@@ -146,3 +148,63 @@ Example:
 ```bash
 GET /api/v1/export/bulk?q=python&from=2023-01-01&to=2023-12-31&municipality=0180
 ```
+
+## Metadata & Quality Information Usage
+
+Endpoints provide detailed information about data quality and structure to help researchers and analysts understand data completeness and potential issues.
+
+### Database Metadata
+
+Endpoint: `/api/v1/metadata`
+
+Get overall database statistics and quality indicators:
+
+```bash
+GET /api/v1/metadata
+```
+
+Response includes:
+
+- Total number of ads
+- Date range (earliest to latest publication)
+- Field-level metadata (completeness %, data types, sample values)
+- Average database completeness score
+- Quality distribution summary (excellent/good/acceptable/poor)
+
+### Ad Quality Metadata
+
+Endpoint: `/api/v1/metadata/ad/{id}`
+
+Get quality information for a specific ad:
+
+```bash
+GET /api/v1/metadata/ad/12345
+```
+
+Response includes:
+
+- Completeness score (percentage of filled fields)
+- List of missing/empty fields
+- Data structure information
+- Quality issues (if any)
+
+### Detailed Ad with Metadata
+
+Endpoint: `/api/v1/search/ad/{id}`
+
+Retrieve an ad with optional quality metadata:
+
+```bash
+# With metadata (default)
+GET /api/v1/search/ad/12345
+
+# Without metadata
+GET /api/v1/search/ad/12345?include_metadata=false
+```
+
+Response includes the full ad data plus:
+
+- Completeness score
+- Missing field information
+- Data structure details
+- Quality assessment

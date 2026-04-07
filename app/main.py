@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="API for searching historical job ads from Arbetsförmedlingen",
+    description="API for searching historical job ads from ArbetsfÃ¶rmedlingen",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -69,6 +69,7 @@ async def root():
             "filters": "/api/v1/filters",
             "export": "/api/v1/export",
             "bulk_export": "/api/v1/export/bulk",
+            "share_url": "/api/v1/share-url",
         },
     }
 

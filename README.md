@@ -1,6 +1,6 @@
 # Historical Ads Backend API
 
-FastAPI backend for searching and analyzing historical job listings from the Swedish Public Employment Service (Arbetsförmedlingen).
+FastAPI backend for searching and analyzing historical job listings from the Swedish Public Employment Service (ArbetsfÃ¶rmedlingen).
 
 ## API Endpoints
 
@@ -15,6 +15,7 @@ FastAPI backend for searching and analyzing historical job listings from the Swe
 | `/api/v1/export/bulk`      | GET   | Export matching ads as a ZIP file with split CSV parts     |
 | `/api/v1/metadata`         | GET   | Get overall database quality and structure metadata        |
 | `/api/v1/metadata/ad/{id}` | GET   | Get quality metadata for a specific ad                     |
+| `/api/v1/share-url`        | GET   | Return a shareable search URL based on current query       |
 | `/health`                  | GET   | Health check                                               |
 
 ## Getting Started
@@ -38,7 +39,6 @@ docker compose up --build
 # Stop the server
 docker compose down
 ```
-
 
 ## API Documentation
 
@@ -208,3 +208,28 @@ Response includes the full ad data plus:
 - Missing field information
 - Data structure details
 - Quality assessment
+
+## Shared Search URLs
+
+Issue 12 is implemented as a stateless share URL helper.
+
+Endpoint: `/api/v1/share-url`
+
+The endpoint returns the current search URL so users can copy and share it directly.
+
+Example:
+
+```bash
+GET /api/v1/share-url?q=python&region=01&occupation=2512&occupation=2513
+```
+
+Response:
+
+```json
+{ "share_url": "/api/v1/search?q=python&region=01&occupation=2512&occupation=2513" }
+```
+
+Notes:
+
+- No token or persisted state is needed
+- The existing search URL already contains all search and filter parameters

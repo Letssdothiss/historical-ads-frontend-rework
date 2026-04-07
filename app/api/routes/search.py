@@ -1,5 +1,6 @@
 """Search routes"""
 import logging
+import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -75,6 +76,62 @@ def _build_search_context(hit: Dict[str, Any]) -> list[Dict[str, str]]:
     return context[:50]
 
 
+def _query_terms(query: str) -> list[str]:
+    return [term for term in query.lower().split() if term]
+
+
+def _normalize_limit(value: Any, default: int = 20, minimum: int = 1, maximum: int = 100) -> int:
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def _fragment_score(path: str, text: str, terms: list[str]) -> tuple[int, int, int]:
+    normalized_path = path.lower()
+    normalized_text = text.lower()
+    words = set(re.findall(r"\w+", normalized_text))
+
+    score = 0
+    matched_terms = 0
+    for term in terms:
+        if term in normalized_path:
+            score += 3
+            matched_terms += 1
+        if term in words:
+            score += 8
+            matched_terms += 1
+        elif term in normalized_text:
+            score += 5
+            matched_terms += 1
+
+    return score, matched_terms, len(text)
+
+
+def _match_query_context(hit: Dict[str, Any], query: str, limit: int = 20) -> list[Dict[str, Any]]:
+    terms = _query_terms(query)
+    if not terms:
+        return []
+
+    ranked_matches: list[tuple[int, int, int, Dict[str, Any]]] = []
+    for path, text in _iter_text_fragments(hit):
+        score, matched_terms, text_len = _fragment_score(path, text, terms)
+        if score <= 0:
+            continue
+        ranked_matches.append(
+            (
+                score,
+                matched_terms,
+                -text_len,
+                {"path": path, "value": text, "score": score, "matched_terms": matched_terms},
+            )
+        )
+
+    ranked_matches.sort(reverse=True)
+    return [item[3] for item in ranked_matches[:limit]]
+
+
 @router.get("/search")
 async def search(
     request: Request,
@@ -82,6 +139,7 @@ async def search(
 ) -> Dict[str, Any]:
     """Search historical job ads"""
     search_kwargs = _build_search_kwargs(request)
+    matched_context_limit = _normalize_limit(search_kwargs.pop("matched_context_limit", None))
     result = await api.search(**search_kwargs)
 
     if isinstance(result, dict) and "result_count" not in result:
@@ -107,8 +165,15 @@ async def search(
             for hit in hits:
                 if isinstance(hit, dict):
                     enriched_hit = dict(hit)
-                    enriched_hit["search_context"] = _build_search_context(enriched_hit)
-                    enriched_hits.append(enriched_hit)
+                    matched_context = _match_query_context(
+                        enriched_hit,
+                        str(query),
+                        limit=matched_context_limit,
+                    )
+                    if matched_context:
+                        enriched_hit["search_context"] = _build_search_context(enriched_hit)
+                        enriched_hit["matched_context"] = matched_context
+                        enriched_hits.append(enriched_hit)
                 else:
                     enriched_hits.append(hit)
             result["hits"] = enriched_hits

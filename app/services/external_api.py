@@ -16,15 +16,13 @@ class HistoricalAdsAPI:
     def __init__(self):
         self.base_url = settings.HISTORICAL_API_BASE_URL
         self.timeout = settings.API_TIMEOUT
-    
+
     async def search(self, **filters: Any) -> Dict[str, Any]:
         """Search for job ads"""
         params: Dict[str, Any] = {
-            key.replace("_", "-"): value
-            for key, value in filters.items()
-            if value is not None
+            key.replace("_", "-"): value for key, value in filters.items() if value is not None
         }
-        
+
         url = f"{self.base_url}/search"
 
         try:
@@ -48,15 +46,13 @@ class HistoricalAdsAPI:
             raise TimeoutError("API request timed out")
         except httpx.ConnectError:
             raise ExternalAPIError("Failed to connect")
-    
+
     async def get_stats(self, **filters: Any) -> Dict[str, Any]:
         """Get statistics"""
         params: Dict[str, Any] = {
-            key.replace("_", "-"): value
-            for key, value in filters.items()
-            if value is not None
+            key.replace("_", "-"): value for key, value in filters.items() if value is not None
         }
-        
+
         url = f"{self.base_url}/stats"
 
         try:

@@ -1,4 +1,5 @@
 """Metadata routes for database and ad quality information"""
+
 import logging
 from typing import Dict, Any
 
@@ -17,7 +18,7 @@ async def get_database_metadata(
     processor: DataProcessor = Depends(get_processor),
 ) -> Dict[str, Any]:
     """Get overall database quality metadata and statistics
-    
+
     Returns information about:
     - Total number of ads
     - Date range of data
@@ -30,15 +31,12 @@ async def get_database_metadata(
         result = await api.search(limit=100, offset=0)
         ads = result.get("hits", [])
         total_count = result.get("result_count", len(ads))
-        
+
         metadata = processor.calculate_database_metadata(ads, total_count)
         return metadata
     except Exception as e:
         logger.error(f"Error calculating database metadata: {e}")
-        return {
-            "error": "Failed to calculate metadata",
-            "details": str(e)
-        }
+        return {"error": "Failed to calculate metadata", "details": str(e)}
 
 
 @router.get("/metadata/ad/{ad_id}", response_model=dict)
@@ -48,7 +46,7 @@ async def get_ad_quality_metadata(
     processor: DataProcessor = Depends(get_processor),
 ) -> Dict[str, Any]:
     """Get quality metadata for a specific advertisement
-    
+
     Returns:
     - Completeness score (percentage of non-empty fields)
     - List of missing/empty fields
@@ -61,8 +59,4 @@ async def get_ad_quality_metadata(
         return quality_metadata
     except Exception as e:
         logger.error(f"Error calculating ad quality metadata for {ad_id}: {e}")
-        return {
-            "error": "Failed to calculate ad metadata",
-            "details": str(e),
-            "ad_id": ad_id
-        }
+        return {"error": "Failed to calculate ad metadata", "details": str(e), "ad_id": ad_id}

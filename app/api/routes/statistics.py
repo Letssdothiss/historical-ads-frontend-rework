@@ -1,4 +1,5 @@
 """Statistics routes"""
+
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, Request
 

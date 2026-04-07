@@ -1,4 +1,5 @@
 """Export routes"""
+
 import io
 import logging
 import zipfile
@@ -102,13 +103,13 @@ async def export(
     limit = min(limit, settings.MAX_EXPORT_RECORDS, settings.MAX_PAGE_SIZE)
     search_kwargs = _build_query_kwargs(request)
     search_kwargs["limit"] = limit
-    
+
     # Single-file exports keep the current API behavior for JSON, CSV, and XLSX.
     result = await api.search(**search_kwargs)
-    
+
     ads = result.get("hits", [])
     filename = processor.filename(search_kwargs.get("q"), format.value)
-    
+
     if format == ExportFormat.JSON:
         data = processor.to_json(ads).encode()
         media_type = "application/json"
@@ -118,7 +119,7 @@ async def export(
     else:
         data = processor.to_xlsx(ads)
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    
+
     return Response(
         content=data,
         media_type=media_type,

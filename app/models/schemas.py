@@ -41,6 +41,7 @@ class ExportQuery(BaseModel):
 
 class FieldMetadata(BaseModel):
     """Metadata about a single field"""
+
     field_name: str = Field(description="Field name")
     data_type: str = Field(description="Data type (string, date, number, etc)")
     completeness: float = Field(ge=0, le=100, description="Percentage of non-null values")
@@ -51,6 +52,7 @@ class FieldMetadata(BaseModel):
 
 class AdQualityMetadata(BaseModel):
     """Quality indicators for a specific ad"""
+
     ad_id: str = Field(description="Advertisement ID")
     completeness_score: float = Field(ge=0, le=100, description="Overall completeness percentage")
     missing_fields: List[str] = Field(description="List of empty/missing fields")
@@ -60,6 +62,7 @@ class AdQualityMetadata(BaseModel):
 
 class DatabaseMetadata(BaseModel):
     """Overall database quality metadata"""
+
     total_ads: int = Field(description="Total number of ads in database")
     date_range: Dict[str, str] = Field(description="Date range of ads (min_date, max_date)")
     field_metadata: List[FieldMetadata] = Field(description="Metadata for each field")

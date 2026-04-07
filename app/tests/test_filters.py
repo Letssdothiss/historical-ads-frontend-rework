@@ -1,4 +1,5 @@
 """Tests for dynamic filters and stats routes."""
+
 from fastapi.testclient import TestClient
 
 from app.main import app

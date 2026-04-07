@@ -2,8 +2,8 @@
 import io
 import logging
 import zipfile
-from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, Query
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
 from app.models.schemas import ExportFormat
@@ -14,34 +14,57 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Export"])
 
 
-def _search_kwargs(
-    q: Optional[str],
-    published_before: Optional[str],
-    published_after: Optional[str],
-    occupation: Optional[List[str]],
-    occupation_group: Optional[List[str]],
-    occupation_field: Optional[List[str]],
-    municipality: Optional[List[str]],
-    region: Optional[List[str]],
-    country: Optional[List[str]],
-    employment_type: Optional[List[str]],
-    experience_required: Optional[bool],
-) -> Dict[str, Any]:
-    """Build a search payload that matches the search endpoint filters."""
-    # Keep export filters aligned with the public search route.
-    return {
-        "q": q,
-        "published_before": published_before,
-        "published_after": published_after,
-        "occupation": occupation,
-        "occupation_group": occupation_group,
-        "occupation_field": occupation_field,
-        "municipality": municipality,
-        "region": region,
-        "country": country,
-        "employment_type": employment_type,
-        "experience_required": experience_required,
-    }
+DATE_FILTER_ALIASES = {
+    "from": "published_after",
+    "to": "published_before",
+    "from_date": "published_after",
+    "to_date": "published_before",
+    "start_date": "published_after",
+    "end_date": "published_before",
+    "date_from": "published_after",
+    "date_to": "published_before",
+    "published_from": "published_after",
+    "published_to": "published_before",
+}
+
+EXCLUDED_EXPORT_QUERY_KEYS = {"format", "fields"}
+
+
+def _to_bool(value: str) -> Optional[bool]:
+    text = value.strip().lower()
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def _build_query_kwargs(request: Request) -> Dict[str, Any]:
+    grouped_values: Dict[str, list[str]] = {}
+    for key, value in request.query_params.multi_items():
+        grouped_values.setdefault(key, []).append(value)
+
+    query_kwargs: Dict[str, Any] = {}
+    for key, values in grouped_values.items():
+        normalized_key = key.replace("-", "_")
+        if normalized_key in EXCLUDED_EXPORT_QUERY_KEYS:
+            continue
+
+        mapped_key = DATE_FILTER_ALIASES.get(normalized_key, normalized_key)
+
+        # Prefer explicit canonical date keys if both alias and canonical keys are sent.
+        if mapped_key in query_kwargs and normalized_key != mapped_key:
+            continue
+
+        parsed_value: Any = values if len(values) > 1 else values[0]
+
+        if normalized_key == "experience_required":
+            parsed_bool = _to_bool(values[-1])
+            query_kwargs[mapped_key] = parsed_bool if parsed_bool is not None else values[-1]
+            continue
+
+        query_kwargs[mapped_key] = parsed_value
+    return query_kwargs
 
 
 async def _iter_export_batches(
@@ -69,43 +92,22 @@ async def _iter_export_batches(
 
 @router.get("/export")
 async def export(
-    q: Optional[str] = Query(None),
+    request: Request,
     format: ExportFormat = Query(ExportFormat.JSON),
     limit: int = Query(1000, le=10000),
-    published_before: Optional[str] = Query(None),
-    published_after: Optional[str] = Query(None),
-    occupation: Optional[List[str]] = Query(None),
-    occupation_group: Optional[List[str]] = Query(None),
-    occupation_field: Optional[List[str]] = Query(None),
-    municipality: Optional[List[str]] = Query(None),
-    region: Optional[List[str]] = Query(None),
-    country: Optional[List[str]] = Query(None),
-    employment_type: Optional[List[str]] = Query(None),
-    experience_required: Optional[bool] = Query(None),
     api: HistoricalAdsAPI = Depends(get_api),
     processor: DataProcessor = Depends(get_processor),
 ) -> Response:
     """Export job ads"""
-    limit = min(limit, settings.MAX_EXPORT_RECORDS)
+    limit = min(limit, settings.MAX_EXPORT_RECORDS, settings.MAX_PAGE_SIZE)
+    search_kwargs = _build_query_kwargs(request)
+    search_kwargs["limit"] = limit
     
     # Single-file exports keep the current API behavior for JSON, CSV, and XLSX.
-    result = await api.search(
-        q=q,
-        limit=limit,
-        published_before=published_before,
-        published_after=published_after,
-        occupation=occupation,
-        occupation_group=occupation_group,
-        occupation_field=occupation_field,
-        municipality=municipality,
-        region=region,
-        country=country,
-        employment_type=employment_type,
-        experience_required=experience_required,
-    )
+    result = await api.search(**search_kwargs)
     
     ads = result.get("hits", [])
-    filename = processor.filename(q, format.value)
+    filename = processor.filename(search_kwargs.get("q"), format.value)
     
     if format == ExportFormat.JSON:
         data = processor.to_json(ads).encode()
@@ -126,36 +128,14 @@ async def export(
 
 @router.get("/export/bulk")
 async def export_bulk(
-    q: Optional[str] = Query(None),
-    published_before: Optional[str] = Query(None),
-    published_after: Optional[str] = Query(None),
-    occupation: Optional[List[str]] = Query(None),
-    occupation_group: Optional[List[str]] = Query(None),
-    occupation_field: Optional[List[str]] = Query(None),
-    municipality: Optional[List[str]] = Query(None),
-    region: Optional[List[str]] = Query(None),
-    country: Optional[List[str]] = Query(None),
-    employment_type: Optional[List[str]] = Query(None),
-    experience_required: Optional[bool] = Query(None),
+    request: Request,
     api: HistoricalAdsAPI = Depends(get_api),
     processor: DataProcessor = Depends(get_processor),
 ) -> Response:
     """Export all matching ads as split CSV files inside a ZIP archive."""
-    search_kwargs = _search_kwargs(
-        q=q,
-        published_before=published_before,
-        published_after=published_after,
-        occupation=occupation,
-        occupation_group=occupation_group,
-        occupation_field=occupation_field,
-        municipality=municipality,
-        region=region,
-        country=country,
-        employment_type=employment_type,
-        experience_required=experience_required,
-    )
-    chunk_size = min(1000, settings.MAX_EXPORT_RECORDS)
-    archive_name = processor.filename(q, "zip")
+    search_kwargs = _build_query_kwargs(request)
+    chunk_size = min(settings.MAX_PAGE_SIZE, settings.MAX_EXPORT_RECORDS)
+    archive_name = processor.filename(search_kwargs.get("q"), "zip")
     csv_stem = archive_name[:-4]
 
     zip_buffer = io.BytesIO()

@@ -26,7 +26,7 @@ def test_search_free_text_returns_hits_and_count():
 		{
 			"hits": [
 				{"id": "ad-1", "headline": "Data scientist"},
-				{"id": "ad-2", "headline": "Data engineer"},
+				{"id": "ad-2", "headline": "Data engineer", "description": "Pythonutvecklare med fokus pa data"},
 			]
 		}
 	)
@@ -53,7 +53,7 @@ def test_search_combined_filters_are_forwarded():
 	# Simulate a payload where total is nested in an object.
 	fake_api = FakeAPI(
 		{
-			"hits": [{"id": "ad-99", "headline": "Backendutvecklare"}],
+			"hits": [{"id": "ad-99", "headline": "Backendutvecklare", "description": "Python er meriterande"}],
 			"total": {"value": 47},
 		}
 	)
@@ -88,21 +88,22 @@ def test_search_combined_filters_are_forwarded():
 	body = response.json()
 	assert body["hits"][0]["id"] == "ad-99"
 	assert body["result_count"] == 47
+	assert body["hits"][0]["matched_context"]
 
 	# Validate that all filters and pagination options are forwarded correctly.
 	assert fake_api.last_kwargs["q"] == "python"
 	assert fake_api.last_kwargs["published_before"] == "2024-12-31"
 	assert fake_api.last_kwargs["published_after"] == "2024-01-01"
 	assert fake_api.last_kwargs["occupation"] == ["2512", "2513"]
-	assert fake_api.last_kwargs["occupation_group"] == ["23"]
-	assert fake_api.last_kwargs["occupation_field"] == ["3"]
-	assert fake_api.last_kwargs["municipality"] == ["0180"]
-	assert fake_api.last_kwargs["region"] == ["01"]
-	assert fake_api.last_kwargs["country"] == ["SE"]
-	assert fake_api.last_kwargs["employment_type"] == ["Heltid"]
-	assert fake_api.last_kwargs["experience_required"] is True
-	assert fake_api.last_kwargs["offset"] == 5
-	assert fake_api.last_kwargs["limit"] == 25
+	assert fake_api.last_kwargs["occupation_group"] == "23"
+	assert fake_api.last_kwargs["occupation_field"] == "3"
+	assert fake_api.last_kwargs["municipality"] == "0180"
+	assert fake_api.last_kwargs["region"] == "01"
+	assert fake_api.last_kwargs["country"] == "SE"
+	assert fake_api.last_kwargs["employment_type"] == "Heltid"
+	assert fake_api.last_kwargs["experience_required"] == "true"
+	assert fake_api.last_kwargs["offset"] == "5"
+	assert fake_api.last_kwargs["limit"] == "25"
 
 
 def test_search_keeps_existing_result_count():
@@ -126,3 +127,99 @@ def test_search_keeps_existing_result_count():
 	assert response.status_code == 200
 	body = response.json()
 	assert body["result_count"] == 1337
+
+
+def test_search_forwards_dynamic_filters_without_route_changes():
+	# Simulate an upstream response for a newly added filter key.
+	fake_api = FakeAPI({"hits": [], "total": 0})
+	app.dependency_overrides[get_api] = lambda: fake_api
+
+	params = [
+		("q", "python"),
+		("custom-filter", "alpha"),
+		("custom-filter", "beta"),
+		("offset", "2"),
+		("limit", "15"),
+	]
+
+	try:
+		client = TestClient(app)
+		response = client.get("/api/v1/search", params=params)
+	finally:
+		app.dependency_overrides.clear()
+
+	assert response.status_code == 200
+	body = response.json()
+	assert body["result_count"] == 0
+	assert fake_api.last_kwargs["q"] == "python"
+	assert fake_api.last_kwargs["custom_filter"] == ["alpha", "beta"]
+	assert fake_api.last_kwargs["offset"] == "2"
+	assert fake_api.last_kwargs["limit"] == "15"
+
+
+def test_search_exposes_generic_search_context():
+	fake_api = FakeAPI(
+		{
+			"hits": [
+				{
+					"id": "ad-200",
+					"headline": "Supportmedarbetare",
+					"requirements": {
+						"language_note": "Språkkrav: Svenska och Engelska",
+						"experience": "Tidigare arbete inom kundservice är meriterande",
+					},
+				},
+			],
+			"total": 1,
+		}
+	)
+	app.dependency_overrides[get_api] = lambda: fake_api
+
+	try:
+		client = TestClient(app)
+		response = client.get("/api/v1/search", params={"q": "språk"})
+	finally:
+		app.dependency_overrides.clear()
+
+	assert response.status_code == 200
+	body = response.json()
+	assert body["hits"][0]["search_context"]
+	assert {"path": "requirements.language_note", "value": "Språkkrav: Svenska och Engelska"} in body["hits"][0]["search_context"]
+	assert body["hits"][0]["matched_context"]
+
+
+def test_search_returns_most_relevant_matched_context_and_limit():
+	fake_api = FakeAPI(
+		{
+			"hits": [
+				{
+					"id": "ad-300",
+					"headline": "Python utvecklare",
+					"description": "Vi söker en pythonutvecklare med python och data-erfarenhet",
+					"notes": "Allmän information",
+					"requirements": {
+						"must_have": "Python",
+						"language": "Svenska",
+					},
+				}
+			],
+			"total": 1,
+		}
+	)
+	app.dependency_overrides[get_api] = lambda: fake_api
+
+	try:
+		client = TestClient(app)
+		response = client.get(
+			"/api/v1/search",
+			params={"q": "python data", "matched_context_limit": "2"},
+		)
+	finally:
+		app.dependency_overrides.clear()
+
+	assert response.status_code == 200
+	body = response.json()
+	matched = body["hits"][0]["matched_context"]
+	assert len(matched) == 2
+	assert matched[0]["score"] >= matched[1]["score"]
+	assert matched[0]["matched_terms"] >= 1

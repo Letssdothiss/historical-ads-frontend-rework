@@ -16,47 +16,13 @@ class HistoricalAdsAPI:
         self.base_url = settings.HISTORICAL_API_BASE_URL
         self.timeout = settings.API_TIMEOUT
     
-    async def search(
-        self,
-        q: Optional[str] = None,
-        offset: int = 0,
-        limit: int = 10,
-        published_before: Optional[str] = None,
-        published_after: Optional[str] = None,
-        occupation: Optional[List[str]] = None,
-        occupation_group: Optional[List[str]] = None,
-        occupation_field: Optional[List[str]] = None,
-        municipality: Optional[List[str]] = None,
-        region: Optional[List[str]] = None,
-        country: Optional[List[str]] = None,
-        employment_type: Optional[List[str]] = None,
-        experience_required: Optional[bool] = None,
-    ) -> Dict[str, Any]:
+    async def search(self, **filters: Any) -> Dict[str, Any]:
         """Search for job ads"""
-        params = {"offset": offset, "limit": limit}
-        
-        if q:
-            params["q"] = q
-        if published_before:
-            params["published-before"] = published_before
-        if published_after:
-            params["published-after"] = published_after
-        if occupation:
-            params["occupation"] = occupation
-        if occupation_group:
-            params["occupation-group"] = occupation_group
-        if occupation_field:
-            params["occupation-field"] = occupation_field
-        if municipality:
-            params["municipality"] = municipality
-        if region:
-            params["region"] = region
-        if country:
-            params["country"] = country
-        if employment_type:
-            params["employment-type"] = employment_type
-        if experience_required is not None:
-            params["experience-required"] = str(experience_required).lower()
+        params: Dict[str, Any] = {
+            key.replace("_", "-"): value
+            for key, value in filters.items()
+            if value is not None
+        }
         
         url = f"{self.base_url}/search"
         
@@ -82,36 +48,13 @@ class HistoricalAdsAPI:
         except httpx.ConnectError:
             raise ExternalAPIError("Failed to connect")
     
-    async def get_stats(
-        self,
-        q: Optional[str] = None,
-        published_before: Optional[str] = None,
-        published_after: Optional[str] = None,
-        occupation: Optional[List[str]] = None,
-        occupation_group: Optional[List[str]] = None,
-        occupation_field: Optional[List[str]] = None,
-        municipality: Optional[List[str]] = None,
-        region: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+    async def get_stats(self, **filters: Any) -> Dict[str, Any]:
         """Get statistics"""
-        params = {}
-        
-        if q:
-            params["q"] = q
-        if published_before:
-            params["published-before"] = published_before
-        if published_after:
-            params["published-after"] = published_after
-        if occupation:
-            params["occupation"] = occupation
-        if occupation_group:
-            params["occupation-group"] = occupation_group
-        if occupation_field:
-            params["occupation-field"] = occupation_field
-        if municipality:
-            params["municipality"] = municipality
-        if region:
-            params["region"] = region
+        params: Dict[str, Any] = {
+            key.replace("_", "-"): value
+            for key, value in filters.items()
+            if value is not None
+        }
         
         url = f"{self.base_url}/stats"
         

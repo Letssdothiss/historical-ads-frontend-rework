@@ -33,3 +33,32 @@ class ExportQuery(BaseModel):
     search: SearchQuery = Field(default_factory=SearchQuery)
     format: ExportFormat = Field(ExportFormat.JSON, description="Export format")
     fields: Optional[List[str]] = Field(None, description="Fields to export")
+
+
+class FieldMetadata(BaseModel):
+    """Metadata about a single field"""
+    field_name: str = Field(description="Field name")
+    data_type: str = Field(description="Data type (string, date, number, etc)")
+    completeness: float = Field(ge=0, le=100, description="Percentage of non-null values")
+    total_records: int = Field(ge=0, description="Total records in database")
+    filled_records: int = Field(ge=0, description="Records with non-null value")
+    sample_values: List[Any] = Field(description="Sample values from the field")
+
+
+class AdQualityMetadata(BaseModel):
+    """Quality indicators for a specific ad"""
+    ad_id: str = Field(description="Advertisement ID")
+    completeness_score: float = Field(ge=0, le=100, description="Overall completeness percentage")
+    missing_fields: List[str] = Field(description="List of empty/missing fields")
+    quality_issues: List[str] = Field(default_factory=list, description="Known quality issues")
+    data_structure: Dict[str, Any] = Field(description="Structure of the ad data")
+
+
+class DatabaseMetadata(BaseModel):
+    """Overall database quality metadata"""
+    total_ads: int = Field(description="Total number of ads in database")
+    date_range: Dict[str, str] = Field(description="Date range of ads (min_date, max_date)")
+    field_metadata: List[FieldMetadata] = Field(description="Metadata for each field")
+    average_completeness: float = Field(ge=0, le=100, description="Average field completeness")
+    data_quality_summary: Dict[str, Any] = Field(description="Summary of data quality issues")
+    last_updated: str = Field(description="Last database update timestamp")

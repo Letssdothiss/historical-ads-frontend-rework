@@ -1,50 +1,43 @@
 """Filters routes"""
-
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, Query
+from typing import Dict, Any
+from fastapi import APIRouter, Depends, Request
 
 from app.services import get_api, get_processor, HistoricalAdsAPI, DataProcessor
 
 router = APIRouter(tags=["Filters"])
 
 
+def _build_query_kwargs(request: Request) -> Dict[str, Any]:
+    grouped_values: Dict[str, list[str]] = {}
+    for key, value in request.query_params.multi_items():
+        grouped_values.setdefault(key, []).append(value)
+
+    return {
+        key.replace("-", "_"): values if len(values) > 1 else values[0]
+        for key, values in grouped_values.items()
+    }
+
+
 @router.get("/filters")
 async def get_filters(
-    q: Optional[str] = Query(None),
+    request: Request,
     api: HistoricalAdsAPI = Depends(get_api),
     processor: DataProcessor = Depends(get_processor),
 ) -> Dict[str, Any]:
     """Get available filter options"""
-    stats = await api.get_stats(q=q)
+    stats = await api.get_stats(**_build_query_kwargs(request))
     return processor.extract_filters(stats)
 
 
-@router.get("/filters/occupations")
-async def get_occupations(
-    q: Optional[str] = Query(None),
+@router.get("/filters/{filter_name}")
+async def get_filter(
+    filter_name: str,
+    request: Request,
     api: HistoricalAdsAPI = Depends(get_api),
+    processor: DataProcessor = Depends(get_processor),
 ):
-    """Get occupation filter options"""
-    stats = await api.get_stats(q=q)
-    return {"occupations": stats.get("stats", {}).get("occupation-name", [])[:50]}
-
-
-@router.get("/filters/regions")
-async def get_regions(
-    q: Optional[str] = Query(None),
-    api: HistoricalAdsAPI = Depends(get_api),
-):
-    """Get region filter options"""
-    stats = await api.get_stats(q=q)
-    return {"regions": stats.get("stats", {}).get("region", [])}
-
-
-@router.get("/filters/municipalities")
-async def get_municipalities(
-    q: Optional[str] = Query(None),
-    limit: int = Query(50, le=100),
-    api: HistoricalAdsAPI = Depends(get_api),
-):
-    """Get municipality filter options"""
-    stats = await api.get_stats(q=q)
-    return {"municipalities": stats.get("stats", {}).get("municipality", [])[:limit]}
+    """Get a single filter group by name."""
+    stats = await api.get_stats(**_build_query_kwargs(request))
+    filters = processor.extract_filters(stats)
+    normalized_name = filter_name.replace("-", "_")
+    return {normalized_name: filters.get(normalized_name, [])}

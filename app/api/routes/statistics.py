@@ -1,6 +1,6 @@
 """Statistics routes"""
-from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, Query
+from typing import Dict, Any
+from fastapi import APIRouter, Depends, Request
 
 from app.services import get_api, HistoricalAdsAPI
 
@@ -9,24 +9,20 @@ router = APIRouter(tags=["Statistics"])
 
 @router.get("/stats")
 async def get_stats(
-    q: Optional[str] = Query(None),
-    published_before: Optional[str] = Query(None),
-    published_after: Optional[str] = Query(None),
-    occupation: Optional[List[str]] = Query(None),
-    occupation_group: Optional[List[str]] = Query(None),
-    occupation_field: Optional[List[str]] = Query(None),
-    municipality: Optional[List[str]] = Query(None),
-    region: Optional[List[str]] = Query(None),
+    request: Request,
     api: HistoricalAdsAPI = Depends(get_api),
 ) -> Dict[str, Any]:
     """Get statistics about job ads"""
-    return await api.get_stats(
-        q=q,
-        published_before=published_before,
-        published_after=published_after,
-        occupation=occupation,
-        occupation_group=occupation_group,
-        occupation_field=occupation_field,
-        municipality=municipality,
-        region=region,
-    )
+    params: Dict[str, Any] = {}
+    for key, value in request.query_params.multi_items():
+        normalized_key = key.replace("-", "_")
+        if normalized_key in params:
+            existing = params[normalized_key]
+            if isinstance(existing, list):
+                existing.append(value)
+            else:
+                params[normalized_key] = [existing, value]
+        else:
+            params[normalized_key] = value
+
+    return await api.get_stats(**params)

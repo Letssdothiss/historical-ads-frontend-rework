@@ -3,9 +3,9 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Query
 
-from app.services import get_api, HistoricalAdsAPI
+from app.services import get_api, get_processor, HistoricalAdsAPI, DataProcessor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])
@@ -182,6 +182,23 @@ async def search(
 
 
 @router.get("/search/ad/{ad_id}")
-async def get_ad(ad_id: str, api: HistoricalAdsAPI = Depends(get_api)) -> Dict[str, Any]:
-    """Get specific job ad"""
-    return await api.get_ad(ad_id)
+async def get_ad(
+    ad_id: str,
+    api: HistoricalAdsAPI = Depends(get_api),
+    processor: DataProcessor = Depends(get_processor),
+    include_metadata: bool = Query(True, description="Include quality metadata in response")
+) -> Dict[str, Any]:
+    """Get specific job ad with optional quality metadata
+    
+    Query parameters:
+    - include_metadata: Include data quality and structure information (default: true)
+    """
+    ad = await api.get_ad(ad_id)
+    
+    if include_metadata:
+        quality_metadata = processor.calculate_ad_quality(ad)
+        return {
+            "ad": ad,
+            "metadata": quality_metadata
+        }
+    return ad

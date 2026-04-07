@@ -1,4 +1,5 @@
 """Share routes for creating a reusable search URL."""
+
 from fastapi import APIRouter, Request
 
 router = APIRouter(tags=["Shares"])

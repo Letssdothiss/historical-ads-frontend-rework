@@ -1,4 +1,5 @@
 """Tests for export routes."""
+
 import io
 import zipfile
 
@@ -20,7 +21,7 @@ class FakeBulkAPI:
         self.calls.append(kwargs)
         offset = kwargs["offset"]
         limit = kwargs["limit"]
-        return {"hits": self.ads[offset:offset + limit]}
+        return {"hits": self.ads[offset : offset + limit]}
 
     async def get_ad(self, ad_id: str):
         return {"id": ad_id}

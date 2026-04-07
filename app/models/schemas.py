@@ -1,11 +1,14 @@
 """Request/Response schemas"""
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class ExportFormat(str, Enum):
     """Export format enum"""
+
     JSON = "json"
     CSV = "csv"
     XLSX = "xlsx"
@@ -13,6 +16,7 @@ class ExportFormat(str, Enum):
 
 class SearchQuery(BaseModel):
     """Search query parameters"""
+
     q: Optional[str] = Field(None, description="Free text search")
     offset: int = Field(0, ge=0, description="Pagination offset")
     limit: int = Field(10, ge=1, le=100, description="Number of results")
@@ -30,6 +34,7 @@ class SearchQuery(BaseModel):
 
 class ExportQuery(BaseModel):
     """Export query parameters"""
+
     search: SearchQuery = Field(default_factory=SearchQuery)
     format: ExportFormat = Field(ExportFormat.JSON, description="Export format")
     fields: Optional[List[str]] = Field(None, description="Fields to export")
@@ -37,6 +42,7 @@ class ExportQuery(BaseModel):
 
 class FieldMetadata(BaseModel):
     """Metadata about a single field"""
+
     field_name: str = Field(description="Field name")
     data_type: str = Field(description="Data type (string, date, number, etc)")
     completeness: float = Field(ge=0, le=100, description="Percentage of non-null values")
@@ -47,6 +53,7 @@ class FieldMetadata(BaseModel):
 
 class AdQualityMetadata(BaseModel):
     """Quality indicators for a specific ad"""
+
     ad_id: str = Field(description="Advertisement ID")
     completeness_score: float = Field(ge=0, le=100, description="Overall completeness percentage")
     missing_fields: List[str] = Field(description="List of empty/missing fields")
@@ -56,6 +63,7 @@ class AdQualityMetadata(BaseModel):
 
 class DatabaseMetadata(BaseModel):
     """Overall database quality metadata"""
+
     total_ads: int = Field(description="Total number of ads in database")
     date_range: Dict[str, str] = Field(description="Date range of ads (min_date, max_date)")
     field_metadata: List[FieldMetadata] = Field(description="Metadata for each field")

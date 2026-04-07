@@ -90,15 +90,12 @@ class DataProcessor:
         return f"annonser_{ts}.{ext}"
     
     @staticmethod
-    def extract_filters(stats: Dict) -> Dict[str, List]:
-        """Extract filter options from stats"""
+    def extract_filters(stats: Dict) -> Dict[str, Any]:
+        """Extract filter options from stats."""
         s = stats.get("stats", {})
         return {
-            "occupations": s.get("occupation-name", [])[:20],
-            "regions": s.get("region", [])[:21],
-            "municipalities": s.get("municipality", [])[:50],
-            "employment_types": s.get("employment-type", []),
-            "occupation_fields": s.get("occupation-field", []),
+            key.replace("-", "_"): value
+            for key, value in s.items()
         }
 
 

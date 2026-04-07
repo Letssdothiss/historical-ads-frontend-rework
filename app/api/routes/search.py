@@ -1,7 +1,8 @@
 """Search routes"""
 import logging
-from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, Query
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, Request
 
 from app.services import get_api, HistoricalAdsAPI
 
@@ -34,32 +35,54 @@ def _to_int_count(value: Any) -> Optional[int]:
     return None
 
 
+def _build_search_kwargs(request: Request) -> Dict[str, Any]:
+    """Convert incoming query params into keyword arguments for the API client."""
+    grouped_values: Dict[str, list[str]] = {}
+    for key, value in request.query_params.multi_items():
+        grouped_values.setdefault(key, []).append(value)
+
+    search_kwargs: Dict[str, Any] = {}
+    for key, values in grouped_values.items():
+        normalized_key = key.replace("-", "_")
+        search_kwargs[normalized_key] = values if len(values) > 1 else values[0]
+    return search_kwargs
+
+
+def _iter_text_fragments(value: Any, path: str = ""):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}" if path else key
+            yield from _iter_text_fragments(child, child_path)
+        return
+
+    if isinstance(value, list):
+        for child in value:
+            yield from _iter_text_fragments(child, path)
+        return
+
+    if value is None:
+        return
+
+    text = str(value).strip()
+    if text:
+        yield path, text
+
+
+def _build_search_context(hit: Dict[str, Any]) -> list[Dict[str, str]]:
+    context: list[Dict[str, str]] = []
+    for path, text in _iter_text_fragments(hit):
+        context.append({"path": path, "value": text})
+    return context[:50]
+
+
 @router.get("/search")
 async def search(
-    q: Optional[str] = Query(None),
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    published_before: Optional[str] = Query(None),
-    published_after: Optional[str] = Query(None),
-    occupation: Optional[List[str]] = Query(None),
-    occupation_group: Optional[List[str]] = Query(None),
-    occupation_field: Optional[List[str]] = Query(None),
-    municipality: Optional[List[str]] = Query(None),
-    region: Optional[List[str]] = Query(None),
-    country: Optional[List[str]] = Query(None),
-    employment_type: Optional[List[str]] = Query(None),
-    experience_required: Optional[bool] = Query(None),
+    request: Request,
     api: HistoricalAdsAPI = Depends(get_api),
 ) -> Dict[str, Any]:
     """Search historical job ads"""
-    result = await api.search(
-        q=q, offset=offset, limit=limit,
-        published_before=published_before, published_after=published_after,
-        occupation=occupation, occupation_group=occupation_group,
-        occupation_field=occupation_field, municipality=municipality,
-        region=region, country=country, employment_type=employment_type,
-        experience_required=experience_required,
-    )
+    search_kwargs = _build_search_kwargs(request)
+    result = await api.search(**search_kwargs)
 
     if isinstance(result, dict) and "result_count" not in result:
         # Build a stable count field even if external APIs use different names.
@@ -75,6 +98,20 @@ async def search(
 
         if result_count is not None:
             result["result_count"] = result_count
+
+    query = search_kwargs.get("q")
+    if query and isinstance(result, dict):
+        hits = result.get("hits")
+        if isinstance(hits, list):
+            enriched_hits = []
+            for hit in hits:
+                if isinstance(hit, dict):
+                    enriched_hit = dict(hit)
+                    enriched_hit["search_context"] = _build_search_context(enriched_hit)
+                    enriched_hits.append(enriched_hit)
+                else:
+                    enriched_hits.append(hit)
+            result["hits"] = enriched_hits
 
     return result
 

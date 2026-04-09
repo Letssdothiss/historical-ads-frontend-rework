@@ -7,7 +7,7 @@ extend-exclude = [".venv"]
 extend-select = [
   "I", # Import Sorting
   "B" # bugbear(common bugs)
-  # Uncomment UP rule to modernize syntax from py 3.9 to py 3.11. 
+  # Uncomment UP rule to modernize syntax from py 3.9 to py 3.11.
   # "UP", # Enforce the set target-version syntax standard.
 ]
 
@@ -25,3 +25,6 @@ unfixable = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

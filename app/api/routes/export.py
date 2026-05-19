@@ -8,9 +8,11 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
+from app.api.routes.query_utils import group_query_params
 from app.models.schemas import ExportFormat
 from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 from app.utils.config import settings
+from app.utils.date_filters import normalize_date_filters
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Export"])
@@ -42,31 +44,30 @@ def _to_bool(value: str) -> Optional[bool]:
 
 
 def _build_query_kwargs(request: Request) -> Dict[str, Any]:
-    grouped_values: Dict[str, list[str]] = {}
-    for key, value in request.query_params.multi_items():
-        grouped_values.setdefault(key, []).append(value)
+    grouped_values = group_query_params(request)
 
     query_kwargs: Dict[str, Any] = {}
     for key, values in grouped_values.items():
-        normalized_key = key.replace("-", "_")
-        if normalized_key in EXCLUDED_EXPORT_QUERY_KEYS:
+        if key in EXCLUDED_EXPORT_QUERY_KEYS:
             continue
 
-        mapped_key = DATE_FILTER_ALIASES.get(normalized_key, normalized_key)
+        mapped_key = DATE_FILTER_ALIASES.get(key, key)
 
         # Prefer explicit canonical date keys if both alias and canonical keys are sent.
-        if mapped_key in query_kwargs and normalized_key != mapped_key:
+        if mapped_key in query_kwargs and key != mapped_key:
             continue
 
         parsed_value: Any = values if len(values) > 1 else values[0]
 
-        if normalized_key == "experience_required":
+        if key == "experience_required":
             parsed_bool = _to_bool(values[-1])
-            query_kwargs[mapped_key] = parsed_bool if parsed_bool is not None else values[-1]
+            query_kwargs[mapped_key] = (
+                parsed_bool if parsed_bool is not None else values[-1]
+            )
             continue
 
         query_kwargs[mapped_key] = parsed_value
-    return query_kwargs
+    return normalize_date_filters(query_kwargs)
 
 
 async def _iter_export_batches(
@@ -144,7 +145,9 @@ async def export_bulk(
     part_number = 1
 
     # Write each batch as its own CSV file inside the ZIP archive.
-    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(
+        zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED
+    ) as archive:
         async for ads in _iter_export_batches(api, chunk_size, **search_kwargs):
             csv_name = f"{csv_stem}_part{part_number:03d}.csv"
             archive.writestr(csv_name, processor.to_csv(ads))

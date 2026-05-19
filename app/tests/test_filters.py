@@ -1,5 +1,7 @@
 """Tests for dynamic filters and stats routes."""
 
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -9,18 +11,20 @@ from app.services import get_api
 class FakeStatsAPI:
     """Async API stub for stats-driven routes."""
 
-    def __init__(self, payload):
+    def __init__(self, payload: dict[str, Any]):
         self.payload = payload
-        self.last_kwargs = None
+        self.last_kwargs: dict[str, Any] = {}
+        self.last_search_kwargs: dict[str, Any] = {}
 
-    async def get_stats(self, **kwargs):
+    async def get_stats(self, **kwargs: Any) -> dict[str, Any]:
         self.last_kwargs = kwargs
         return self.payload
 
-    async def search(self, **kwargs):
+    async def search(self, **kwargs: Any) -> dict[str, list[Any]]:
+        self.last_search_kwargs = kwargs
         return {"hits": []}
 
-    async def get_ad(self, ad_id: str):
+    async def get_ad(self, ad_id: str) -> dict[str, str]:
         return {"id": ad_id}
 
 
@@ -36,7 +40,7 @@ def test_filters_returns_dynamic_keys_and_forwards_query_params():
     )
     app.dependency_overrides[get_api] = lambda: fake_api
 
-    params = [("q", "sprak"), ("custom-filter", "alpha"), ("custom-filter", "beta")]
+    params = (("q", "sprak"), ("custom-filter", "alpha"), ("custom-filter", "beta"))
 
     try:
         client = TestClient(app)
@@ -80,7 +84,7 @@ def test_stats_route_forwards_dynamic_parameters():
     fake_api = FakeStatsAPI({"stats": {"region": ["Skane"]}})
     app.dependency_overrides[get_api] = lambda: fake_api
 
-    params = [("q", "python"), ("custom-filter", "alpha"), ("custom-filter", "beta")]
+    params = (("q", "snickare"), ("custom-filter", "alpha"), ("custom-filter", "beta"))
 
     try:
         client = TestClient(app)
@@ -90,5 +94,5 @@ def test_stats_route_forwards_dynamic_parameters():
 
     assert response.status_code == 200
     assert response.json() == {"stats": {"region": ["Skane"]}}
-    assert fake_api.last_kwargs["q"] == "python"
+    assert fake_api.last_kwargs["q"] == "snickare"
     assert fake_api.last_kwargs["custom_filter"] == ["alpha", "beta"]

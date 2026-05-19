@@ -1,14 +1,14 @@
 """Search routes"""
 
-import logging
 import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from app.api.routes.query_utils import build_query_kwargs
 from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
+from app.utils.date_filters import normalize_date_filters
 
-logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])
 
 
@@ -39,15 +39,7 @@ def _to_int_count(value: Any) -> Optional[int]:
 
 def _build_search_kwargs(request: Request) -> Dict[str, Any]:
     """Convert incoming query params into keyword arguments for the API client."""
-    grouped_values: Dict[str, list[str]] = {}
-    for key, value in request.query_params.multi_items():
-        grouped_values.setdefault(key, []).append(value)
-
-    search_kwargs: Dict[str, Any] = {}
-    for key, values in grouped_values.items():
-        normalized_key = key.replace("-", "_")
-        search_kwargs[normalized_key] = values if len(values) > 1 else values[0]
-    return search_kwargs
+    return normalize_date_filters(build_query_kwargs(request))
 
 
 def _iter_text_fragments(value: Any, path: str = ""):
@@ -81,7 +73,9 @@ def _query_terms(query: str) -> list[str]:
     return [term for term in query.lower().split() if term]
 
 
-def _normalize_limit(value: Any, default: int = 20, minimum: int = 1, maximum: int = 100) -> int:
+def _normalize_limit(
+    value: Any, default: int = 20, minimum: int = 1, maximum: int = 100
+) -> int:
     try:
         parsed = int(str(value))
     except (TypeError, ValueError):
@@ -110,7 +104,9 @@ def _fragment_score(path: str, text: str, terms: list[str]) -> tuple[int, int, i
     return score, matched_terms, len(text)
 
 
-def _match_query_context(hit: Dict[str, Any], query: str, limit: int = 20) -> list[Dict[str, Any]]:
+def _match_query_context(
+    hit: Dict[str, Any], query: str, limit: int = 20
+) -> list[Dict[str, Any]]:
     terms = _query_terms(query)
     if not terms:
         return []
@@ -125,11 +121,17 @@ def _match_query_context(hit: Dict[str, Any], query: str, limit: int = 20) -> li
                 score,
                 matched_terms,
                 -text_len,
-                {"path": path, "value": text, "score": score, "matched_terms": matched_terms},
+                {
+                    "path": path,
+                    "value": text,
+                    "score": score,
+                    "matched_terms": matched_terms,
+                },
             )
         )
 
-    ranked_matches.sort(reverse=True)
+    # Use a key for sorting to avoid comparing dicts when tuples tie on first elements.
+    ranked_matches.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
     return [item[3] for item in ranked_matches[:limit]]
 
 
@@ -140,7 +142,9 @@ async def search(
 ) -> Dict[str, Any]:
     """Search historical job ads"""
     search_kwargs = _build_search_kwargs(request)
-    matched_context_limit = _normalize_limit(search_kwargs.pop("matched_context_limit", None))
+    matched_context_limit = _normalize_limit(
+        search_kwargs.pop("matched_context_limit", None)
+    )
     result = await api.search(**search_kwargs)
 
     if isinstance(result, dict) and "result_count" not in result:
@@ -172,7 +176,9 @@ async def search(
                         limit=matched_context_limit,
                     )
                     if matched_context:
-                        enriched_hit["search_context"] = _build_search_context(enriched_hit)
+                        enriched_hit["search_context"] = _build_search_context(
+                            enriched_hit
+                        )
                         enriched_hit["matched_context"] = matched_context
                         enriched_hits.append(enriched_hit)
                 else:
@@ -187,7 +193,9 @@ async def get_ad(
     ad_id: str,
     api: HistoricalAdsAPI = Depends(get_api),
     processor: DataProcessor = Depends(get_processor),
-    include_metadata: bool = Query(True, description="Include quality metadata in response"),
+    include_metadata: bool = Query(
+        True, description="Include quality metadata in response"
+    ),
 ) -> Dict[str, Any]:
     """Get specific job ad with optional quality metadata
 
@@ -198,5 +206,10 @@ async def get_ad(
 
     if include_metadata:
         quality_metadata = processor.calculate_ad_quality(ad)
+        # Preserve the ad's top-level shape (so `id` stays at root) and attach metadata
+        if isinstance(ad, dict):
+            enriched = dict(ad)
+            enriched["metadata"] = quality_metadata
+            return enriched
         return {"ad": ad, "metadata": quality_metadata}
     return ad

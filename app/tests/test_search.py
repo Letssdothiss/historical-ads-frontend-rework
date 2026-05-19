@@ -1,5 +1,7 @@
 """Tests for Issue 3 search requirements."""
 
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -9,15 +11,15 @@ from app.services import get_api
 class FakeAPI:
     """Simple async API stub for route tests."""
 
-    def __init__(self, payload):
+    def __init__(self, payload: dict[str, Any]):
         self.payload = payload
-        self.last_kwargs = None
+        self.last_kwargs: dict[str, Any] = {}
 
-    async def search(self, **kwargs):
+    async def search(self, **kwargs: Any) -> dict[str, Any]:
         self.last_kwargs = kwargs
         return self.payload
 
-    async def get_ad(self, ad_id: str):
+    async def get_ad(self, ad_id: str) -> dict[str, str]:
         return {"id": ad_id}
 
 
@@ -71,7 +73,7 @@ def test_search_combined_filters_are_forwarded():
     app.dependency_overrides[get_api] = lambda: fake_api
 
     # Use list-of-tuples so repeated query keys (for multi-value filters) are preserved.
-    params = [
+    params = (
         ("q", "python"),
         ("published_before", "2024-12-31"),
         ("published_after", "2024-01-01"),
@@ -86,7 +88,7 @@ def test_search_combined_filters_are_forwarded():
         ("experience_required", "true"),
         ("offset", "5"),
         ("limit", "25"),
-    ]
+    )
 
     try:
         client = TestClient(app)
@@ -145,13 +147,13 @@ def test_search_forwards_dynamic_filters_without_route_changes():
     fake_api = FakeAPI({"hits": [], "total": 0})
     app.dependency_overrides[get_api] = lambda: fake_api
 
-    params = [
+    params = (
         ("q", "python"),
         ("custom-filter", "alpha"),
         ("custom-filter", "beta"),
         ("offset", "2"),
         ("limit", "15"),
-    ]
+    )
 
     try:
         client = TestClient(app)
@@ -200,6 +202,76 @@ def test_search_exposes_generic_search_context():
         "value": "Språkkrav: Svenska och Engelska",
     } in body["hits"][0]["search_context"]
     assert body["hits"][0]["matched_context"]
+
+
+def test_search_translates_year_month_into_published_window():
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/search", params={"q": "snickare", "year": "2024", "month": "3"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "year" not in fake_api.last_kwargs
+    assert "month" not in fake_api.last_kwargs
+    assert fake_api.last_kwargs["published_after"] == "2024-03-01"
+    assert fake_api.last_kwargs["published_before"] == "2024-04-01"
+
+
+def test_search_translates_year_only_into_full_year_window():
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search", params={"year": "2024"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_api.last_kwargs["published_after"] == "2024-01-01"
+    assert fake_api.last_kwargs["published_before"] == "2025-01-01"
+
+
+def test_search_translates_from_year_to_year_into_inclusive_range():
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/search", params={"from_year": "2022", "to_year": "2024"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_api.last_kwargs["published_after"] == "2022-01-01"
+    assert fake_api.last_kwargs["published_before"] == "2025-01-01"
+
+
+def test_search_explicit_published_after_overrides_year_alias():
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/search",
+            params={"year": "2024", "published_after": "2024-06-15"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    # Explicit value wins; year alias is consumed but does not override it.
+    assert fake_api.last_kwargs["published_after"] == "2024-06-15"
+    assert fake_api.last_kwargs["published_before"] == "2025-01-01"
 
 
 def test_search_returns_most_relevant_matched_context_and_limit():

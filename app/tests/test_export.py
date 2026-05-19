@@ -54,7 +54,7 @@ def test_bulk_export_returns_zip_with_split_csv_files():
     fake_api = FakeBulkAPI(ads)
     app.dependency_overrides[get_api] = lambda: fake_api
 
-    params = [
+    params = (
         ("q", "2025"),
         ("published_after", "2025-01-01"),
         ("published_before", "2025-12-31"),
@@ -64,7 +64,7 @@ def test_bulk_export_returns_zip_with_split_csv_files():
         ("country", "SE"),
         ("employment_type", "Heltid"),
         ("experience_required", "true"),
-    ]
+    )
 
     try:
         client = TestClient(app)
@@ -121,12 +121,12 @@ def test_export_maps_common_date_aliases_to_published_filters():
     )
     app.dependency_overrides[get_api] = lambda: fake_api
 
-    params = [
+    params = (
         ("q", "analyst"),
         ("from_date", "2024-01-01"),
         ("to_date", "2024-12-31"),
         ("format", "csv"),
-    ]
+    )
 
     try:
         client = TestClient(app)
@@ -149,12 +149,12 @@ def test_export_prefers_explicit_published_filters_over_aliases():
     fake_api = FakeExportAPI({"hits": []})
     app.dependency_overrides[get_api] = lambda: fake_api
 
-    params = [
+    params = (
         ("from", "2023-01-01"),
         ("published_after", "2024-01-01"),
         ("to", "2023-12-31"),
         ("published_before", "2024-12-31"),
-    ]
+    )
 
     try:
         client = TestClient(app)

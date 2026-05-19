@@ -4,19 +4,24 @@ FastAPI backend for searching and analyzing historical job listings from the Swe
 
 ## API Endpoints
 
-| Endpoint                   | Metod | Beskrivning                                                |
-| -------------------------- | ----- | ---------------------------------------------------------- |
-| `/api/v1/search`           | GET   | Search historical job listings                             |
-| `/api/v1/search/ad/{id}`   | GET   | Retrieve a specific listing with optional quality metadata |
-| `/api/v1/stats`            | GET   | Get statistics with dynamic query params                   |
-| `/api/v1/filters`          | GET   | Retrieve all dynamic filter options                        |
-| `/api/v1/filters/{name}`   | GET   | Retrieve a single filter group by name                     |
-| `/api/v1/export`           | GET   | Export data (JSON/CSV/XLSX)                                |
-| `/api/v1/export/bulk`      | GET   | Export matching ads as a ZIP file with split CSV parts     |
-| `/api/v1/metadata`         | GET   | Get overall database quality and structure metadata        |
-| `/api/v1/metadata/ad/{id}` | GET   | Get quality metadata for a specific ad                     |
-| `/api/v1/share-url`        | GET   | Return a shareable search URL based on current query       |
-| `/health`                  | GET   | Health check                                               |
+| Endpoint                          | Metod    | Beskrivning                                                |
+| --------------------------------- | -------- | ---------------------------------------------------------- |
+| `/api/v1/search`                  | GET      | Search historical job listings                             |
+| `/api/v1/search/ad/{id}`          | GET      | Retrieve a specific listing with optional quality metadata |
+| `/api/v1/stats`                   | GET      | Get statistics with dynamic query params                   |
+| `/api/v1/filters`                 | GET      | Retrieve all dynamic filter options                        |
+| `/api/v1/filters/{name}`          | GET      | Retrieve a single filter group by name                     |
+| `/api/v1/export`                  | GET      | Export data (JSON/CSV/XLSX)                                |
+| `/api/v1/export/bulk`             | GET      | Export matching ads as a ZIP file with split CSV parts     |
+| `/api/v1/metadata`                | GET      | Get overall database quality and structure metadata        |
+| `/api/v1/metadata/ad/{id}`        | GET      | Get quality metadata for a specific ad                     |
+| `/api/v1/share-url`               | GET      | Return a shareable search URL based on current query       |
+| `/api/v1/saved-searches`          | POST/GET | Save and list named search presets                         |
+| `/api/v1/saved-searches/{id}`     | GET      | Retrieve a single saved search                             |
+| `/api/v1/shared-searches`         | POST     | Create a shareable search token                            |
+| `/api/v1/shared-searches/{token}` | GET      | Resolve a shared search and run the stored query           |
+| `/api/v1/related-occupations`     | GET      | Get related occupations based on current search context    |
+| `/health`                         | GET      | Health check                                               |
 
 ## Getting Started
 
@@ -146,6 +151,8 @@ GET /api/v1/stats?region=01&employment_type=Heltid
 ```
 
 This endpoint accepts the same dynamic query filters as search.
+
+When `q` is provided, the backend now derives the statistics from the matching search hits so year and region totals reflect the query instead of the unfiltered dataset.
 
 ## Export Usage
 

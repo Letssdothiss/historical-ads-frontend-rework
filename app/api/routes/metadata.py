@@ -5,7 +5,6 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 
-from app.models.schemas import AdQualityMetadata, DatabaseMetadata
 from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 
 logger = logging.getLogger(__name__)
@@ -59,4 +58,8 @@ async def get_ad_quality_metadata(
         return quality_metadata
     except Exception as e:
         logger.error(f"Error calculating ad quality metadata for {ad_id}: {e}")
-        return {"error": "Failed to calculate ad metadata", "details": str(e), "ad_id": ad_id}
+        return {
+            "error": "Failed to calculate ad metadata",
+            "details": str(e),
+            "ad_id": ad_id,
+        }

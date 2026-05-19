@@ -11,6 +11,18 @@ import pandas as pd
 class DataProcessor:
     """Process and transform job ad data"""
 
+    JSON_INDENT = 2
+    PERCENT_SCALE = 100
+    ROUND_DECIMALS = 2
+    MAX_FILENAME_QUERY_LENGTH = 50
+    MAX_SAMPLE_VALUES = 3
+    MAX_SAMPLE_VALUE_LENGTH = 50
+    HIGH_COMPLETENESS_THRESHOLD = 80
+    LOW_COMPLETENESS_THRESHOLD = 50
+    EXCELLENT_THRESHOLD = 90
+    GOOD_THRESHOLD = 70
+    METADATA_DATE_FIELDS = ("publication_date", "published_date", "created_at")
+
     DEFAULT_FIELDS = [
         "id",
         "original_id",
@@ -47,17 +59,26 @@ class DataProcessor:
         return result
 
     @staticmethod
-    def extract(ads: List[Dict], fields: List[str]) -> List[Dict]:
+    def extract(ads: List[Dict[str, Any]], fields: List[str]) -> List[Dict[str, Any]]:
         """Extract specified fields from ads"""
         return [{f: DataProcessor.flatten(ad).get(f, "") for f in fields} for ad in ads]
 
-    def to_json(self, ads: List[Dict], fields: Optional[List[str]] = None) -> str:
+    def to_json(
+        self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None
+    ) -> str:
         """Export to JSON"""
         if fields:
             ads = self.extract(ads, fields)
-        return json.dumps(ads, indent=2, ensure_ascii=False, default=str)
+        return json.dumps(
+            ads,
+            indent=self.JSON_INDENT,
+            ensure_ascii=False,
+            default=str,
+        )
 
-    def to_csv(self, ads: List[Dict], fields: Optional[List[str]] = None) -> str:
+    def to_csv(
+        self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None
+    ) -> str:
         """Export to CSV"""
         if not ads:
             return ""
@@ -66,7 +87,9 @@ class DataProcessor:
         df = pd.DataFrame(data)
         return df.to_csv(index=False)
 
-    def to_xlsx(self, ads: List[Dict], fields: Optional[List[str]] = None) -> bytes:
+    def to_xlsx(
+        self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None
+    ) -> bytes:
         """Export to Excel"""
         fields = fields or self.DEFAULT_FIELDS
         data = self.extract(ads, fields) if ads else []
@@ -84,7 +107,11 @@ class DataProcessor:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         if query:
             safe = "".join(c if c.isalnum() or c in " -_" else "" for c in query)
-            safe = safe[:50].strip().replace(" ", "_")
+            safe = (
+                safe[: DataProcessor.MAX_FILENAME_QUERY_LENGTH]
+                .strip()
+                .replace(" ", "_")
+            )
             return f"annonser_{safe}_{ts}.{ext}"
         return f"annonser_{ts}.{ext}"
 
@@ -139,23 +166,27 @@ class DataProcessor:
             return missing
 
         total_fields, filled_fields = count_fields(ad)
-        completeness = (filled_fields / total_fields * 100) if total_fields > 0 else 0
+        completeness = (
+            filled_fields / total_fields * DataProcessor.PERCENT_SCALE
+            if total_fields > 0
+            else 0
+        )
 
         return {
             "ad_id": ad.get("id", "unknown"),
-            "completeness_score": round(completeness, 2),
+            "completeness_score": round(completeness, DataProcessor.ROUND_DECIMALS),
             "missing_fields": get_missing_fields(ad),
             "quality_issues": [],
             "data_structure": {
                 "total_fields": total_fields,
                 "filled_fields": filled_fields,
-                "field_completeness": round(completeness, 2),
+                "field_completeness": round(completeness, DataProcessor.ROUND_DECIMALS),
             },
         }
 
     @staticmethod
     def calculate_database_metadata(
-        ads: List[Dict[str, Any]], total_count: int = None
+        ads: List[Dict[str, Any]], total_count: Optional[int] = None
     ) -> Dict[str, Any]:
         """Calculate overall database metadata from a sample of ads"""
         if not ads:
@@ -172,12 +203,14 @@ class DataProcessor:
         quality_scores = [
             DataProcessor.calculate_ad_quality(ad)["completeness_score"] for ad in ads
         ]
-        avg_completeness = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+        avg_completeness = (
+            sum(quality_scores) / len(quality_scores) if quality_scores else 0
+        )
 
         # Extract date range
         dates = []
         for ad in ads:
-            for date_field in ["publication_date", "published_date", "created_at"]:
+            for date_field in DataProcessor.METADATA_DATE_FIELDS:
                 if date_field in ad and ad[date_field]:
                     dates.append(str(ad[date_field]))
                     break
@@ -203,19 +236,31 @@ class DataProcessor:
                 field_stats[field]["total"] += 1
                 if value is not None and value != "":
                     field_stats[field]["filled"] += 1
-                    if len(field_stats[field]["samples"]) < 3:
-                        field_stats[field]["samples"].add(str(value)[:50])
+                    if (
+                        len(field_stats[field]["samples"])
+                        < DataProcessor.MAX_SAMPLE_VALUES
+                    ):
+                        field_stats[field]["samples"].add(
+                            str(value)[: DataProcessor.MAX_SAMPLE_VALUE_LENGTH]
+                        )
 
         field_metadata = [
             {
                 "field_name": field,
                 "data_type": stats["type"],
-                "completeness": round(stats["filled"] / stats["total"] * 100, 2)
-                if stats["total"] > 0
-                else 0,
+                "completeness": (
+                    round(
+                        stats["filled"] / stats["total"] * DataProcessor.PERCENT_SCALE,
+                        DataProcessor.ROUND_DECIMALS,
+                    )
+                    if stats["total"] > 0
+                    else 0
+                ),
                 "total_records": stats["total"],
                 "filled_records": stats["filled"],
-                "sample_values": list(stats["samples"])[:3],
+                "sample_values": list(stats["samples"])[
+                    : DataProcessor.MAX_SAMPLE_VALUES
+                ],
             }
             for field, stats in sorted(field_stats.items())
         ]
@@ -224,16 +269,46 @@ class DataProcessor:
             "total_ads": total_count or len(ads),
             "date_range": date_range,
             "field_metadata": field_metadata,
-            "average_completeness": round(avg_completeness, 2),
+            "average_completeness": round(
+                avg_completeness, DataProcessor.ROUND_DECIMALS
+            ),
             "data_quality_summary": {
                 "fields_analyzed": len(field_stats),
-                "highly_complete_fields": sum(1 for f in field_metadata if f["completeness"] >= 80),
-                "incomplete_fields": sum(1 for f in field_metadata if f["completeness"] < 50),
+                "highly_complete_fields": sum(
+                    1
+                    for f in field_metadata
+                    if f["completeness"] >= DataProcessor.HIGH_COMPLETENESS_THRESHOLD
+                ),
+                "incomplete_fields": sum(
+                    1
+                    for f in field_metadata
+                    if f["completeness"] < DataProcessor.LOW_COMPLETENESS_THRESHOLD
+                ),
                 "quality_distribution": {
-                    "excellent": sum(1 for s in quality_scores if s >= 90),
-                    "good": sum(1 for s in quality_scores if 70 <= s < 90),
-                    "acceptable": sum(1 for s in quality_scores if 50 <= s < 70),
-                    "poor": sum(1 for s in quality_scores if s < 50),
+                    "excellent": sum(
+                        1
+                        for s in quality_scores
+                        if s >= DataProcessor.EXCELLENT_THRESHOLD
+                    ),
+                    "good": sum(
+                        1
+                        for s in quality_scores
+                        if DataProcessor.GOOD_THRESHOLD
+                        <= s
+                        < DataProcessor.EXCELLENT_THRESHOLD
+                    ),
+                    "acceptable": sum(
+                        1
+                        for s in quality_scores
+                        if DataProcessor.LOW_COMPLETENESS_THRESHOLD
+                        <= s
+                        < DataProcessor.GOOD_THRESHOLD
+                    ),
+                    "poor": sum(
+                        1
+                        for s in quality_scores
+                        if s < DataProcessor.LOW_COMPLETENESS_THRESHOLD
+                    ),
                 },
             },
             "last_updated": datetime.now().isoformat(),

@@ -167,7 +167,21 @@ async def get_stats(
     use_backend_aggregation = aggregate == "year_region" or explicit_year_request
 
     if not use_backend_aggregation:
-        return await api.get_stats(**normalize_date_filters(params))
+        normalized = normalize_date_filters(params)
+        has_date_filter = "published_after" in normalized or "published_before" in normalized
+        if not has_date_filter:
+            return await api.get_stats(**normalized)
+        search_params = {k: v for k, v in normalized.items() if k not in {"stats", "limit", "offset", "aggregate"}}
+        result = await api.search(**search_params, stats="region", stats_limit=30, limit=0)
+        region_counts = _extract_region_counts(result)
+        return {
+            "stats": {
+                "region": [
+                    {"label": label, "occurrences": count}
+                    for label, count in sorted(region_counts.items(), key=lambda x: x[1], reverse=True)
+                ]
+            }
+        }
 
     years = years[: settings.STATS_MAX_YEAR_CALLS]
 

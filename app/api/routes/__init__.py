@@ -6,8 +6,8 @@ from .export import router as export_router
 from .filters import router as filters_router
 from .metadata import router as metadata_router
 from .related_occupations import router as related_occupations_router
-from .search import router as search_router
 from .saved_searches import router as saved_searches_router
+from .search import router as search_router
 from .shared_searches import router as shared_searches_router
 from .shares import router as shares_router
 from .statistics import router as stats_router

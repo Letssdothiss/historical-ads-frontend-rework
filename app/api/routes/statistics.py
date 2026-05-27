@@ -168,17 +168,27 @@ async def get_stats(
 
     if not use_backend_aggregation:
         normalized = normalize_date_filters(params)
-        has_date_filter = "published_after" in normalized or "published_before" in normalized
+        has_date_filter = (
+            "published_after" in normalized or "published_before" in normalized
+        )
         if not has_date_filter:
             return await api.get_stats(**normalized)
-        search_params = {k: v for k, v in normalized.items() if k not in {"stats", "limit", "offset", "aggregate"}}
-        result = await api.search(**search_params, stats="region", stats_limit=30, limit=0)
+        search_params = {
+            k: v
+            for k, v in normalized.items()
+            if k not in {"stats", "limit", "offset", "aggregate"}
+        }
+        result = await api.search(
+            **search_params, stats="region", stats_limit=30, limit=0
+        )
         region_counts = _extract_region_counts(result)
         return {
             "stats": {
                 "region": [
                     {"label": label, "occurrences": count}
-                    for label, count in sorted(region_counts.items(), key=lambda x: x[1], reverse=True)
+                    for label, count in sorted(
+                        region_counts.items(), key=lambda x: x[1], reverse=True
+                    )
                 ]
             }
         }
@@ -242,12 +252,12 @@ async def get_stats(
 
     counts_by_year_region: Dict[int, Dict[str, int]] = {}
     totals_by_year: Dict[int, int] = {}
-    for year, region_result in zip(years, region_results):
+    for year, region_result in zip(years, region_results, strict=False):
         counts_by_year_region[year] = _extract_region_counts(region_result)
         totals_by_year[year] = _extract_total(region_result)
 
     counts_by_year_month: Dict[int, Dict[str, int]] = {year: {} for year in years}
-    for (year, month), month_result in zip(month_specs, month_results):
+    for (year, month), month_result in zip(month_specs, month_results, strict=False):
         count = _extract_total(month_result)
         if count > 0:
             counts_by_year_month[year][_format_month(year, month)] = count

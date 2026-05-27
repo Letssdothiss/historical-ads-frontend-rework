@@ -11,8 +11,11 @@ from app.services import get_api
 class FakeAPI:
     """Simple async API stub for route tests."""
 
-    def __init__(self, payload: dict[str, Any]):
+    def __init__(
+        self, payload: dict[str, Any], ad_payload: dict[str, Any] | None = None
+    ):
         self.payload = payload
+        self.ad_payload = ad_payload
         self.last_kwargs: dict[str, Any] = {}
 
     async def search(self, **kwargs: Any) -> dict[str, Any]:
@@ -20,6 +23,8 @@ class FakeAPI:
         return self.payload
 
     async def get_ad(self, ad_id: str) -> dict[str, str]:
+        if self.ad_payload is not None:
+            return self.ad_payload
         return {"id": ad_id}
 
 
@@ -54,6 +59,31 @@ def test_search_free_text_returns_hits_and_count():
     assert body["result_count"] == 2
     # Verify free-text query parameter forwarding to the service layer.
     assert fake_api.last_kwargs["q"] == "data"
+
+
+def test_search_exposes_original_id_to_frontend():
+    fake_api = FakeAPI(
+        {
+            "hits": [
+                {
+                    "id": "ad-1",
+                    "originalId": "30429400",
+                    "headline": "Data scientist",
+                }
+            ]
+        }
+    )
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search", params={"q": "data"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["hits"][0]["original_id"] == "30429400"
 
 
 def test_search_combined_filters_are_forwarded():
@@ -236,6 +266,23 @@ def test_search_translates_year_only_into_full_year_window():
     assert response.status_code == 200
     assert fake_api.last_kwargs["published_after"] == "2024-01-01"
     assert fake_api.last_kwargs["published_before"] == "2025-01-01"
+
+
+def test_get_ad_exposes_original_id_to_frontend():
+    fake_api = FakeAPI(
+        {"id": "ad-1"}, ad_payload={"id": "ad-1", "originalId": "30429400"}
+    )
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search/ad/ad-1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["original_id"] == "30429400"
 
 
 def test_search_translates_from_year_to_year_into_inclusive_range():

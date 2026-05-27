@@ -69,6 +69,36 @@ def _build_search_context(hit: Dict[str, Any]) -> list[Dict[str, str]]:
     return context[:50]
 
 
+def _find_original_id(value: Any) -> Optional[Any]:
+    """Find an upstream original id value in common key variants."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            normalized_key = key.replace("-", "_").lower()
+            if normalized_key in {"original_id", "originalid"}:
+                return child
+            found = _find_original_id(child)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_original_id(child)
+            if found is not None:
+                return found
+    return None
+
+
+def _ensure_original_id(hit: Dict[str, Any]) -> Dict[str, Any]:
+    """Guarantee that the frontend gets a top-level original_id field."""
+    normalized_hit = dict(hit)
+
+    if normalized_hit.get("original_id") in (None, ""):
+        source_original_id = _find_original_id(normalized_hit)
+        if source_original_id not in (None, ""):
+            normalized_hit["original_id"] = source_original_id
+
+    return normalized_hit
+
+
 def _query_terms(query: str) -> list[str]:
     return [term for term in query.lower().split() if term]
 
@@ -169,7 +199,7 @@ async def search(
             enriched_hits = []
             for hit in hits:
                 if isinstance(hit, dict):
-                    enriched_hit = dict(hit)
+                    enriched_hit = _ensure_original_id(hit)
                     matched_context = _match_query_context(
                         enriched_hit,
                         str(query),
@@ -208,7 +238,7 @@ async def get_ad(
         quality_metadata = processor.calculate_ad_quality(ad)
         # Preserve the ad's top-level shape (so `id` stays at root) and attach metadata
         if isinstance(ad, dict):
-            enriched = dict(ad)
+            enriched = _ensure_original_id(ad)
             enriched["metadata"] = quality_metadata
             return enriched
         return {"ad": ad, "metadata": quality_metadata}

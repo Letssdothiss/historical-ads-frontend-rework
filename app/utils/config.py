@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     HISTORICAL_API_BASE_URL: str = "https://historical.api.jobtechdev.se"
     API_TIMEOUT: int = 30
     MAX_PAGE_SIZE: int = 100
+    # Upstream caps the search offset; we can't paginate past this.
+    MAX_OFFSET: int = 2000
     MAX_EXPORT_RECORDS: int = 10000
     APP_NAME: str = "Historical Ads Backend API"
     APP_VERSION: str = "1.0.0"
@@ -41,6 +43,25 @@ class Settings(BaseSettings):
     STATS_MAX_YEAR_CALLS: int = 5
     # Cap how many year+month total calls are in flight at once.
     STATS_UPSTREAM_CONCURRENCY: int = 8
+
+    # Historical ads have no structured skills, so the "most common skills"
+    # trend extracts competencies from a sample of ad texts via the JobTech
+    # enrichments API and counts them.
+    JOBAD_ENRICHMENTS_URL: str = (
+        "https://jobad-enrichments-api.jobtechdev.se/enrichtextdocuments"
+    )
+    # How many ads per year to sample for the skills trend (fetched and
+    # enriched in batches of 100 — the enrichments API per-request maximum).
+    SKILLS_TREND_SAMPLE_SIZE: int = 300
+    # Split each year into this many time slices and sample evenly across them,
+    # so a single month's hiring campaign can't dominate the result.
+    SKILLS_TREND_SUBWINDOWS: int = 4
+    # Cap how many ads a single employer may contribute, so a big advertiser's
+    # repeated near-identical ads don't skew the competency counts. 0 disables.
+    SKILLS_TREND_MAX_ADS_PER_EMPLOYER: int = 3
+    # Only count a competency for an ad when the model is at least this sure
+    # the employer actually requested it.
+    SKILLS_TREND_MIN_PREDICTION: float = 0.5
 
     model_config = cast(SettingsConfigDict, ConfigDict(extra="allow"))
 

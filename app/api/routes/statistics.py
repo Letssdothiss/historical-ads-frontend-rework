@@ -15,6 +15,18 @@ from app.utils.date_filters import normalize_date_filters
 
 router = APIRouter(tags=["Statistics"])
 
+# Trend types map to an upstream `stats` aggregation field. Skills have no
+# upstream stats aggregation, so that trend is reported as unsupported.
+TREND_STATS_FIELD: Dict[str, str] = {
+    "top5_occupations": "occupation-group",
+    "top5_growing": "occupation-group",
+    "top5_declining": "occupation-group",
+}
+# How many distinct labels to keep in a trend result.
+TREND_RESULT_LIMIT = 5
+# Pull a generous slice per year so growth/decline ranking sees the full field.
+TREND_STATS_LIMIT = 50
+
 
 def _parse_years_param(params: Dict[str, Any]) -> List[int]:
     if "years" in params:
@@ -67,11 +79,11 @@ def _extract_total(result: Any) -> int:
     return 0
 
 
-def _extract_region_counts(result: Any) -> Dict[str, int]:
-    """Pull region->count out of a /search?stats=region response.
+def _extract_stat_counts(result: Any, stat_type: str) -> Dict[str, int]:
+    """Pull label->count out of a /search?stats=<stat_type> response.
 
-    The upstream uses {"stats": [{"type": "region", "values": [...]}]};
-    older fake responses use {"stats": {"region": [...]}}, so we accept both.
+    The upstream uses {"stats": [{"type": "<stat_type>", "values": [...]}]};
+    older fake responses use {"stats": {"<stat_type>": [...]}}, so we accept both.
     """
     counts: Dict[str, int] = {}
     if not isinstance(result, dict):
@@ -99,12 +111,17 @@ def _extract_region_counts(result: Any) -> Dict[str, int]:
     stats = result.get("stats")
     if isinstance(stats, list):
         for block in stats:
-            if isinstance(block, dict) and block.get("type") == "region":
+            if isinstance(block, dict) and block.get("type") == stat_type:
                 _harvest(block.get("values"))
     elif isinstance(stats, dict):
-        _harvest(stats.get("region"))
+        _harvest(stats.get(stat_type))
 
     return counts
+
+
+def _extract_region_counts(result: Any) -> Dict[str, int]:
+    """Pull region->count out of a /search?stats=region response."""
+    return _extract_stat_counts(result, "region")
 
 
 def _build_region_year_table(
@@ -145,6 +162,390 @@ async def _bounded_search(
         return await api.search(**kwargs)
 
 
+def _select_trend_labels(
+    trend: str,
+    years: List[int],
+    counts_by_year_label: Dict[int, Dict[str, int]],
+    limit: int = TREND_RESULT_LIMIT,
+) -> List[str]:
+    """Pick which labels a trend should surface.
+
+    - ``top5_occupations``: the labels with the highest total across all years.
+    - ``top5_growing`` / ``top5_declining``: ranked by the change between the
+      first and last year in the requested span.
+    """
+    labels: Set[str] = set()
+    for year in years:
+        labels.update(counts_by_year_label.get(year, {}).keys())
+
+    def total(label: str) -> int:
+        return sum(counts_by_year_label.get(year, {}).get(label, 0) for year in years)
+
+    if trend in ("top5_growing", "top5_declining") and len(years) >= 2:
+        first, last = years[0], years[-1]
+
+        def change(label: str) -> int:
+            after = counts_by_year_label.get(last, {}).get(label, 0)
+            before = counts_by_year_label.get(first, {}).get(label, 0)
+            return after - before
+
+        ranked = sorted(
+            labels,
+            key=lambda label: (change(label), total(label)),
+            reverse=(trend == "top5_growing"),
+        )
+    else:
+        ranked = sorted(labels, key=total, reverse=True)
+
+    return ranked[:limit]
+
+
+def _shape_trend_result(
+    trend: str,
+    years: List[int],
+    counts_by_year_label: Dict[int, Dict[str, int]],
+    labels: List[str],
+    *,
+    api_calls: int,
+    source: str,
+    meta_extra: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Build the region-shaped trend payload the frontend table already reads."""
+    selected_counts: Dict[int, Dict[str, int]] = {
+        year: {
+            label: counts_by_year_label.get(year, {}).get(label, 0)
+            for label in labels
+        }
+        for year in years
+    }
+
+    stats_by_year = {
+        str(year): {
+            "region": [
+                {"label": label, "occurrences": selected_counts[year][label]}
+                for label in labels
+            ],
+            "month": [],
+            "total_occurrences": sum(selected_counts[year].values()),
+        }
+        for year in years
+    }
+
+    meta: Dict[str, Any] = {"api_calls": api_calls, "years": years}
+    if meta_extra:
+        meta.update(meta_extra)
+
+    return {
+        "stats_by_year": stats_by_year,
+        "table_by_region": _build_region_year_table(years, selected_counts),
+        "trend": trend,
+        "trend_supported": True,
+        "aggregation_source": source,
+        "meta": meta,
+    }
+
+
+def _trend_excluded_params() -> Set[str]:
+    """Query keys that must not be forwarded to upstream during a trend run."""
+    return {
+        "trend",
+        "from_date",
+        "to_date",
+        "from",
+        "to",
+        "years",
+        "from_year",
+        "to_year",
+        "year",
+        "month",
+        "aggregate",
+        "offset",
+        "limit",
+        "sort",
+        "stats",
+        "published_after",
+        "published_before",
+    }
+
+
+def _count_competencies(enriched: Any, min_prediction: float) -> Dict[str, int]:
+    """Count, per competency label, how many ads requested it (doc frequency)."""
+    counts: Dict[str, int] = {}
+    if not isinstance(enriched, list):
+        return counts
+    for doc in enriched:
+        if not isinstance(doc, dict):
+            continue
+        candidates = (doc.get("enriched_candidates") or {}).get("competencies") or []
+        seen: Set[str] = set()
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            try:
+                prediction = float(candidate.get("prediction", 0))
+            except (TypeError, ValueError):
+                prediction = 0.0
+            if prediction < min_prediction:
+                continue
+            label = candidate.get("concept_label") or candidate.get("term")
+            if isinstance(label, str) and label and label not in seen:
+                seen.add(label)
+                counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def _employer_key(hit: Dict[str, Any]) -> str:
+    """A stable per-employer key used to cap any one advertiser's influence."""
+    employer = hit.get("employer") if isinstance(hit, dict) else None
+    if isinstance(employer, dict):
+        for field in ("organization_number", "name", "workplace"):
+            value = employer.get(field)
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+    return f"_unknown_{hit.get('id')}"
+
+
+def _ad_documents(result: Any) -> List[Dict[str, str]]:
+    """Turn /search hits into sample records (those that carry usable text)."""
+    documents: List[Dict[str, str]] = []
+    hits = result.get("hits") if isinstance(result, dict) else None
+    if not isinstance(hits, list):
+        return documents
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
+        text = (hit.get("description") or {}).get("text") or ""
+        headline = hit.get("headline") or ""
+        if not text and not headline:
+            continue
+        documents.append(
+            {
+                "doc_id": str(hit.get("id") or len(documents)),
+                "doc_headline": str(headline),
+                "doc_text": str(text),
+                "employer": _employer_key(hit),
+            }
+        )
+    return documents
+
+
+def _year_subwindows(year: int, slices: int) -> List[Tuple[str, str]]:
+    """Split a year into ``slices`` contiguous date windows (month-aligned)."""
+    slices = max(1, min(12, slices))
+    edges = [round(i * 12 / slices) for i in range(slices + 1)]
+    windows: List[Tuple[str, str]] = []
+    for i in range(slices):
+        start_month = edges[i] + 1
+        after = f"{year:04d}-{start_month:02d}-01"
+        end_month = edges[i + 1]
+        if end_month >= 12:
+            before = f"{year + 1:04d}-01-01"
+        else:
+            before = f"{year:04d}-{end_month + 1:02d}-01"
+        windows.append((after, before))
+    return windows
+
+
+def _cap_per_employer(
+    documents: List[Dict[str, str]], cap: int
+) -> List[Dict[str, str]]:
+    """Keep at most ``cap`` ads per employer (cap <= 0 keeps everything)."""
+    if cap <= 0:
+        return documents
+    kept: List[Dict[str, str]] = []
+    seen: Dict[str, int] = {}
+    for doc in documents:
+        employer = doc["employer"]
+        if seen.get(employer, 0) >= cap:
+            continue
+        seen[employer] = seen.get(employer, 0) + 1
+        kept.append(doc)
+    return kept
+
+
+async def _fetch_window_documents(
+    api: HistoricalAdsAPI,
+    semaphore: asyncio.Semaphore,
+    base_params: Dict[str, Any],
+    after: str,
+    before: str,
+    target: int,
+) -> Tuple[List[Dict[str, str]], int]:
+    """Page through one time window (sorted by id for an unbiased spread)."""
+    documents: List[Dict[str, str]] = []
+    api_calls = 0
+    offset = 0
+    while len(documents) < target and offset <= settings.MAX_OFFSET:
+        page_size = min(settings.MAX_PAGE_SIZE, target - len(documents))
+        async with semaphore:
+            result = await api.search(
+                **base_params,
+                published_after=after,
+                published_before=before,
+                sort="id",
+                limit=page_size,
+                offset=offset,
+            )
+        api_calls += 1
+        page_docs = _ad_documents(result)
+        if not page_docs:
+            break
+        documents.extend(page_docs)
+        offset += page_size
+    return documents, api_calls
+
+
+async def _sample_competency_counts(
+    api: HistoricalAdsAPI,
+    semaphore: asyncio.Semaphore,
+    base_params: Dict[str, Any],
+    year: int,
+    sample_size: int,
+    sub_windows: int,
+    per_employer_cap: int,
+    min_prediction: float,
+) -> Tuple[int, Dict[str, int], int]:
+    """Sample ads spread across the year, de-skew, enrich, and count skills."""
+    windows = _year_subwindows(year, sub_windows)
+    per_window = -(-sample_size // len(windows))  # ceil division
+
+    window_results = await asyncio.gather(
+        *[
+            _fetch_window_documents(
+                api, semaphore, base_params, after, before, per_window
+            )
+            for after, before in windows
+        ]
+    )
+
+    documents: List[Dict[str, str]] = []
+    api_calls = 0
+    for docs, calls in window_results:
+        documents.extend(docs)
+        api_calls += calls
+
+    documents = _cap_per_employer(documents, per_employer_cap)
+
+    counts: Dict[str, int] = {}
+    for start in range(0, len(documents), 100):
+        batch = [
+            {k: doc[k] for k in ("doc_id", "doc_headline", "doc_text")}
+            for doc in documents[start : start + 100]
+        ]
+        async with semaphore:
+            enriched = await api.enrich_documents(batch)
+        api_calls += 1
+        for label, count in _count_competencies(enriched, min_prediction).items():
+            counts[label] = counts.get(label, 0) + count
+
+    return year, counts, api_calls
+
+
+async def _run_skills_trend(
+    api: HistoricalAdsAPI,
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Approximate the most-requested competencies from a sample of ad texts."""
+    years = sorted(set(_parse_years_param(params)))[: settings.STATS_MAX_YEAR_CALLS]
+    base_params = {
+        k: v for k, v in params.items() if k not in _trend_excluded_params()
+    }
+
+    semaphore = asyncio.Semaphore(settings.STATS_UPSTREAM_CONCURRENCY)
+    results = await asyncio.gather(
+        *[
+            _sample_competency_counts(
+                api,
+                semaphore,
+                base_params,
+                year,
+                settings.SKILLS_TREND_SAMPLE_SIZE,
+                settings.SKILLS_TREND_SUBWINDOWS,
+                settings.SKILLS_TREND_MAX_ADS_PER_EMPLOYER,
+                settings.SKILLS_TREND_MIN_PREDICTION,
+            )
+            for year in years
+        ]
+    )
+
+    counts_by_year_label: Dict[int, Dict[str, int]] = {}
+    total_calls = 0
+    for year, counts, calls in results:
+        counts_by_year_label[year] = counts
+        total_calls += calls
+
+    labels = _select_trend_labels("top5_skills", years, counts_by_year_label)
+
+    return _shape_trend_result(
+        "top5_skills",
+        years,
+        counts_by_year_label,
+        labels,
+        api_calls=total_calls,
+        source="enrichments_competency_sample",
+        meta_extra={
+            "sample_size": settings.SKILLS_TREND_SAMPLE_SIZE,
+            "sub_windows": settings.SKILLS_TREND_SUBWINDOWS,
+            "max_ads_per_employer": settings.SKILLS_TREND_MAX_ADS_PER_EMPLOYER,
+            "approximate": True,
+        },
+    )
+
+
+async def _run_trend_aggregation(
+    api: HistoricalAdsAPI,
+    trend: str,
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Aggregate a top-5 occupation-group trend honouring the active filters."""
+    field = TREND_STATS_FIELD[trend]
+
+    years = _parse_years_param(params)
+    # Growth/decline needs two reference points. When the user picked a single
+    # year, anchor on it and compare against the previous year so the change is
+    # measured around their selection (rather than a fixed, unrelated window).
+    if trend in ("top5_growing", "top5_declining") and len(set(years)) < 2:
+        anchor = max(years) if years else datetime.utcnow().year
+        years = [anchor - 1, anchor]
+    years = sorted(set(years))[: settings.STATS_MAX_YEAR_CALLS]
+
+    base_params = {
+        k: v for k, v in params.items() if k not in _trend_excluded_params()
+    }
+
+    semaphore = asyncio.Semaphore(settings.STATS_UPSTREAM_CONCURRENCY)
+    tasks = [
+        _bounded_search(
+            api,
+            semaphore,
+            **base_params,
+            stats=field,
+            stats_limit=TREND_STATS_LIMIT,
+            limit=0,
+            published_after=f"{year:04d}-01-01",
+            published_before=f"{year + 1:04d}-01-01",
+        )
+        for year in years
+    ]
+    results = await asyncio.gather(*tasks)
+
+    counts_by_year_label: Dict[int, Dict[str, int]] = {}
+    for year, result in zip(years, results, strict=False):
+        counts_by_year_label[year] = _extract_stat_counts(result, field)
+
+    labels = _select_trend_labels(trend, years, counts_by_year_label)
+
+    return _shape_trend_result(
+        trend,
+        years,
+        counts_by_year_label,
+        labels,
+        api_calls=len(tasks),
+        source="upstream_stats_trend",
+        meta_extra={"stats_field": field},
+    )
+
+
 @router.get("/stats")
 async def get_stats(
     request: Request,
@@ -158,6 +559,23 @@ async def get_stats(
     replaces fetching and locally aggregating thousands of hit objects.
     """
     params = build_query_kwargs(request)
+
+    trend = str(params.get("trend", "")).strip()
+    if trend:
+        if trend == "top5_skills":
+            return await _run_skills_trend(api, params)
+        if trend in TREND_STATS_FIELD:
+            return await _run_trend_aggregation(api, trend, params)
+        # Unknown trend value: be explicit rather than silently falling
+        # through to the region aggregation.
+        return {
+            "stats_by_year": {},
+            "table_by_region": {"years": [], "rows": [], "totalt": 0},
+            "trend": trend,
+            "trend_supported": False,
+            "aggregation_source": "trend_unsupported",
+            "meta": {"api_calls": 0, "years": []},
+        }
 
     aggregate = str(params.get("aggregate", "")).lower()
     explicit_year_request = any(

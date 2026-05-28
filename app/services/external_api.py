@@ -44,6 +44,26 @@ class HistoricalAdsAPI:
         except httpx.ConnectError as e:
             raise ExternalAPIError(f"Failed to connect: {e}") from e
 
+    async def enrich_documents(self, documents: list[Dict[str, Any]]) -> Any:
+        """Extract concepts (competencies, occupations, ...) from ad texts.
+
+        Posts up to 100 documents to the JobTech enrichments API and returns
+        the parsed JSON list of per-document results.
+        """
+        if not documents:
+            return []
+        url = settings.JOBAD_ENRICHMENTS_URL
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    url, json={"documents_input": documents}
+                )
+                return self._handle_response(response)
+        except httpx.TimeoutException as e:
+            raise TimeoutError("Enrichment request timed out") from e
+        except httpx.ConnectError as e:
+            raise ExternalAPIError(f"Failed to connect: {e}") from e
+
     async def search(self, **filters: Any) -> Dict[str, Any]:
         """Search for job ads"""
         params = self._normalize_params(filters)

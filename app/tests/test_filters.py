@@ -20,9 +20,9 @@ class FakeStatsAPI:
         self.last_kwargs = kwargs
         return self.payload
 
-    async def search(self, **kwargs: Any) -> dict[str, list[Any]]:
+    async def search(self, **kwargs: Any) -> dict[str, Any]:
         self.last_search_kwargs = kwargs
-        return {"hits": []}
+        return self.payload
 
     async def get_ad(self, ad_id: str) -> dict[str, str]:
         return {"id": ad_id}
@@ -81,7 +81,11 @@ def test_filters_can_return_a_single_dynamic_group():
 
 
 def test_stats_route_forwards_dynamic_parameters():
-    fake_api = FakeStatsAPI({"stats": {"region": ["Skane"]}})
+    # The undated /stats path aggregates via /search?stats=region so filters
+    # are honoured; the upstream /stats endpoint (get_stats) ignores them.
+    fake_api = FakeStatsAPI(
+        {"stats": [{"type": "region", "values": [{"term": "Skane", "count": 7}]}]}
+    )
     app.dependency_overrides[get_api] = lambda: fake_api
 
     params = (("q", "snickare"), ("custom-filter", "alpha"), ("custom-filter", "beta"))
@@ -93,6 +97,11 @@ def test_stats_route_forwards_dynamic_parameters():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"stats": {"region": ["Skane"]}}
-    assert fake_api.last_kwargs["q"] == "snickare"
-    assert fake_api.last_kwargs["custom_filter"] == ["alpha", "beta"]
+    assert response.json() == {
+        "stats": {"region": [{"label": "Skane", "occurrences": 7}]}
+    }
+    # Filters reach the region aggregation, not the unfiltered get_stats endpoint.
+    assert fake_api.last_kwargs == {}
+    assert fake_api.last_search_kwargs["q"] == "snickare"
+    assert fake_api.last_search_kwargs["custom_filter"] == ["alpha", "beta"]
+    assert fake_api.last_search_kwargs["stats"] == "region"

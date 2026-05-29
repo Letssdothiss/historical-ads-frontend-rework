@@ -586,11 +586,12 @@ async def get_stats(
 
     if not use_backend_aggregation:
         normalized = normalize_date_filters(params)
-        has_date_filter = (
-            "published_after" in normalized or "published_before" in normalized
-        )
-        if not has_date_filter:
-            return await api.get_stats(**normalized)
+        # Always aggregate through /search?stats=region so the active filters
+        # (q, municipality, occupation_group, employment_type, worktime_extent,
+        # duration, driving_license_required, ...) are honoured. The upstream
+        # /stats endpoint ignores these filters and returns the whole-dataset
+        # region breakdown, which made every filtered-but-undated search report
+        # the same ~3.9M total and made "Fakta anställning" appear to do nothing.
         search_params = {
             k: v
             for k, v in normalized.items()

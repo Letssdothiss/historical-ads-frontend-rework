@@ -120,6 +120,39 @@ def test_backend_year_month_aggregation_uses_upstream_stats():
     assert rows["Skåne län"]["totalt"] == 1
 
 
+def test_undated_search_forwards_filters_via_stats_region():
+    """Without a time period, filters must still reach upstream.
+
+    Regression for the bug where every undated search returned the same
+    ~3.9M total because the route short-circuited to the upstream /stats
+    endpoint, which ignores filters (q, employment_type, ...).
+    """
+    fake = FakeStatsBackendAPI()
+    app.dependency_overrides[get_api] = lambda: fake
+
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/stats",
+            params={"q": "snickare", "employment_type": "kpPX_CNN_gDU"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+
+    # The unreliable upstream /stats endpoint must not be used.
+    assert fake.stats_calls == []
+
+    # A single region aggregation that forwarded the active filters.
+    region_calls = [c for c in fake.search_calls if c.get("stats") == "region"]
+    assert len(region_calls) == 1
+    call = region_calls[0]
+    assert call["q"] == "snickare"
+    assert call["employment_type"] == "kpPX_CNN_gDU"
+    assert call["limit"] == 0
+
+
 class FakeTrendBackendAPI:
     """Stub returning occupation-group stats per year window."""
 

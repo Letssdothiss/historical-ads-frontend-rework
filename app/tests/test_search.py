@@ -11,9 +11,7 @@ from app.services import get_api
 class FakeAPI:
     """Simple async API stub for route tests."""
 
-    def __init__(
-        self, payload: dict[str, Any], ad_payload: dict[str, Any] | None = None
-    ):
+    def __init__(self, payload: dict[str, Any], ad_payload: dict[str, Any] | None = None):
         self.payload = payload
         self.ad_payload = ad_payload
         self.last_kwargs: dict[str, Any] = {}
@@ -269,9 +267,7 @@ def test_search_translates_year_only_into_full_year_window():
 
 
 def test_get_ad_exposes_original_id_to_frontend():
-    fake_api = FakeAPI(
-        {"id": "ad-1"}, ad_payload={"id": "ad-1", "originalId": "30429400"}
-    )
+    fake_api = FakeAPI({"id": "ad-1"}, ad_payload={"id": "ad-1", "originalId": "30429400"})
     app.dependency_overrides[get_api] = lambda: fake_api
 
     try:
@@ -291,9 +287,7 @@ def test_search_translates_from_year_to_year_into_inclusive_range():
 
     try:
         client = TestClient(app)
-        response = client.get(
-            "/api/v1/search", params={"from_year": "2022", "to_year": "2024"}
-        )
+        response = client.get("/api/v1/search", params={"from_year": "2022", "to_year": "2024"})
     finally:
         app.dependency_overrides.clear()
 

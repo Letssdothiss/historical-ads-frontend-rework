@@ -27,15 +27,9 @@ class HistoricalAdsAPI:
 
     @staticmethod
     def _normalize_params(filters: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            key.replace("_", "-"): value
-            for key, value in filters.items()
-            if value is not None
-        }
+        return {key.replace("_", "-"): value for key, value in filters.items() if value is not None}
 
-    async def _get(
-        self, path: str, *, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    async def _get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:

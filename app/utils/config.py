@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     MAX_EXPORT_RECORDS: int = 10000
     APP_NAME: str = "Historical Ads Backend API"
     APP_VERSION: str = "1.0.0"
-    APP_DESCRIPTION: str = (
-        "API for searching historical job ads from Arbetsformedlingen"
-    )
+    APP_DESCRIPTION: str = "API for searching historical job ads from Arbetsformedlingen"
     DEBUG: bool = False
     CORS_ORIGINS: List[str] = ["*"]
     DOCS_URL: str = "/docs"
@@ -47,9 +45,7 @@ class Settings(BaseSettings):
     # Historical ads have no structured skills, so the "most common skills"
     # trend extracts competencies from a sample of ad texts via the JobTech
     # enrichments API and counts them.
-    JOBAD_ENRICHMENTS_URL: str = (
-        "https://jobad-enrichments-api.jobtechdev.se/enrichtextdocuments"
-    )
+    JOBAD_ENRICHMENTS_URL: str = "https://jobad-enrichments-api.jobtechdev.se/enrichtextdocuments"
     # How many ads per year to sample for the skills trend (fetched and
     # enriched in batches of 100 — the enrichments API per-request maximum).
     SKILLS_TREND_SAMPLE_SIZE: int = 300

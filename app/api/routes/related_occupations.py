@@ -72,9 +72,7 @@ def _normalize_seed(value: str | list[str] | None) -> str:
 @router.get("/related-occupations")
 async def get_related_occupations(
     request: Request,
-    occupation: Optional[str] = Query(
-        None, description="Seed occupation label or code"
-    ),
+    occupation: Optional[str] = Query(None, description="Seed occupation label or code"),
     limit: int = Query(10, ge=1, le=50),
     api: HistoricalAdsAPI = Depends(get_api),
 ) -> Dict[str, Any]:

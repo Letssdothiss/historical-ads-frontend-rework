@@ -103,9 +103,7 @@ def _query_terms(query: str) -> list[str]:
     return [term for term in query.lower().split() if term]
 
 
-def _normalize_limit(
-    value: Any, default: int = 20, minimum: int = 1, maximum: int = 100
-) -> int:
+def _normalize_limit(value: Any, default: int = 20, minimum: int = 1, maximum: int = 100) -> int:
     try:
         parsed = int(str(value))
     except (TypeError, ValueError):
@@ -134,9 +132,7 @@ def _fragment_score(path: str, text: str, terms: list[str]) -> tuple[int, int, i
     return score, matched_terms, len(text)
 
 
-def _match_query_context(
-    hit: Dict[str, Any], query: str, limit: int = 20
-) -> list[Dict[str, Any]]:
+def _match_query_context(hit: Dict[str, Any], query: str, limit: int = 20) -> list[Dict[str, Any]]:
     terms = _query_terms(query)
     if not terms:
         return []
@@ -172,9 +168,7 @@ async def search(
 ) -> Dict[str, Any]:
     """Search historical job ads"""
     search_kwargs = _build_search_kwargs(request)
-    matched_context_limit = _normalize_limit(
-        search_kwargs.pop("matched_context_limit", None)
-    )
+    matched_context_limit = _normalize_limit(search_kwargs.pop("matched_context_limit", None))
     result = await api.search(**search_kwargs)
 
     if isinstance(result, dict) and "result_count" not in result:
@@ -206,9 +200,7 @@ async def search(
                         limit=matched_context_limit,
                     )
                     if matched_context:
-                        enriched_hit["search_context"] = _build_search_context(
-                            enriched_hit
-                        )
+                        enriched_hit["search_context"] = _build_search_context(enriched_hit)
                         enriched_hit["matched_context"] = matched_context
                         enriched_hits.append(enriched_hit)
                 else:
@@ -223,9 +215,7 @@ async def get_ad(
     ad_id: str,
     api: HistoricalAdsAPI = Depends(get_api),
     processor: DataProcessor = Depends(get_processor),
-    include_metadata: bool = Query(
-        True, description="Include quality metadata in response"
-    ),
+    include_metadata: bool = Query(True, description="Include quality metadata in response"),
 ) -> Dict[str, Any]:
     """Get specific job ad with optional quality metadata
 

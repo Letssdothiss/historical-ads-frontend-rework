@@ -96,12 +96,8 @@ def test_backend_year_month_aggregation_uses_upstream_stats():
     assert by_year["2024"]["total_occurrences"] == 2
     assert by_year["2025"]["total_occurrences"] == 1
 
-    regions_2024 = {
-        item["label"]: item["occurrences"] for item in by_year["2024"]["region"]
-    }
-    months_2024 = {
-        item["label"]: item["occurrences"] for item in by_year["2024"]["month"]
-    }
+    regions_2024 = {item["label"]: item["occurrences"] for item in by_year["2024"]["region"]}
+    months_2024 = {item["label"]: item["occurrences"] for item in by_year["2024"]["month"]}
 
     assert regions_2024["Stockholms län"] == 2
     assert months_2024["2024-01"] == 1
@@ -120,12 +116,13 @@ def test_backend_year_month_aggregation_uses_upstream_stats():
     assert rows["Skåne län"]["totalt"] == 1
 
 
-def test_undated_search_forwards_filters_via_stats_region():
+def test_undated_search_forwards_filters_via_search_stats():
     """Without a time period, filters must still reach upstream.
 
     Regression for the bug where every undated search returned the same
     ~3.9M total because the route short-circuited to the upstream /stats
-    endpoint, which ignores filters (q, employment_type, ...).
+    endpoint, which ignores filters (q, employment_type, ...). The undated
+    path now issues a single filtered /search requesting all stats facets.
     """
     fake = FakeStatsBackendAPI()
     app.dependency_overrides[get_api] = lambda: fake
@@ -144,13 +141,19 @@ def test_undated_search_forwards_filters_via_stats_region():
     # The unreliable upstream /stats endpoint must not be used.
     assert fake.stats_calls == []
 
-    # A single region aggregation that forwarded the active filters.
-    region_calls = [c for c in fake.search_calls if c.get("stats") == "region"]
-    assert len(region_calls) == 1
-    call = region_calls[0]
+    # A single filtered search that forwarded the active filters and requested
+    # all stats facets as a list.
+    assert len(fake.search_calls) == 1
+    call = fake.search_calls[0]
     assert call["q"] == "snickare"
     assert call["employment_type"] == "kpPX_CNN_gDU"
     assert call["limit"] == 0
+    assert call["stats"] == [
+        "region",
+        "municipality",
+        "occupation-group",
+        "occupation-name",
+    ]
 
 
 class FakeTrendBackendAPI:
@@ -314,9 +317,7 @@ def test_skills_trend_counts_competencies_from_enriched_sample():
     app.dependency_overrides[get_api] = lambda: fake
     try:
         client = TestClient(app)
-        response = client.get(
-            "/api/v1/stats", params={"trend": "top5_skills", "years": "2024"}
-        )
+        response = client.get("/api/v1/stats", params={"trend": "top5_skills", "years": "2024"})
     finally:
         app.dependency_overrides.clear()
 

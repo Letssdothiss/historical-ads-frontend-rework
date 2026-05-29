@@ -265,26 +265,49 @@ async def _compute_year_breakdown(
 
     semaphore = asyncio.Semaphore(settings.STATS_UPSTREAM_CONCURRENCY)
 
-    region_tasks = []
-    for year in years:
-        after, before = _year_window(year, months_by_year, bare_months)
-        region_tasks.append(
-            _bounded_search(
-                api,
-                semaphore,
-                **base_params,
-                stats="region",
-                stats_limit=30,
-                limit=0,
-                published_after=after,
-                published_before=before,
-            )
+    # Region stats per year. When a year has all twelve months we issue one
+    # whole-year call (cheap). When only a subset is selected we issue one call
+    # per selected month and sum them, so disjoint months (e.g. Jan + Dec) count
+    # exactly those months instead of widening into the whole-year span.
+    # Each spec is (year, month_or_None, after, before); a non-None month means
+    # the call also yields that month's total for the month breakdown.
+    region_specs: List[Tuple[int, "int | None", str, str]] = []
+    # Separate per-month total calls, only needed for the whole-year case (its
+    # single region call can't break the year down by month).
+    month_only_specs: List[Tuple[int, int, str, str]] = []
+
+    def _month_window(year: int, month: int) -> Tuple[str, str]:
+        next_year, next_month = _next_month(year, month)
+        return (
+            f"{year:04d}-{month:02d}-01",
+            f"{next_year:04d}-{next_month:02d}-01",
         )
 
-    month_specs: List[Tuple[int, int]] = [
-        (year, month)
-        for year in years
-        for month in _selected_months(year, months_by_year, bare_months)
+    for year in years:
+        selected = _selected_months(year, months_by_year, bare_months)
+        if len(selected) == 12:
+            after, before = _year_window(year, months_by_year, bare_months)
+            region_specs.append((year, None, after, before))
+            for month in selected:
+                m_after, m_before = _month_window(year, month)
+                month_only_specs.append((year, month, m_after, m_before))
+        else:
+            for month in selected:
+                m_after, m_before = _month_window(year, month)
+                region_specs.append((year, month, m_after, m_before))
+
+    region_tasks = [
+        _bounded_search(
+            api,
+            semaphore,
+            **base_params,
+            stats="region",
+            stats_limit=30,
+            limit=0,
+            published_after=after,
+            published_before=before,
+        )
+        for (_, _, after, before) in region_specs
     ]
     month_tasks = [
         _bounded_search(
@@ -292,10 +315,10 @@ async def _compute_year_breakdown(
             semaphore,
             **base_params,
             limit=0,
-            published_after=f"{year:04d}-{month:02d}-01",
-            published_before="{:04d}-{:02d}-01".format(*_next_month(year, month)),
+            published_after=after,
+            published_before=before,
         )
-        for year, month in month_specs
+        for (_, _, after, before) in month_only_specs
     ]
 
     region_results, month_results = await asyncio.gather(
@@ -303,14 +326,22 @@ async def _compute_year_breakdown(
         asyncio.gather(*month_tasks),
     )
 
-    counts_by_year_region: Dict[int, Dict[str, int]] = {}
-    totals_by_year: Dict[int, int] = {}
-    for year, region_result in zip(years, region_results, strict=False):
-        counts_by_year_region[year] = _extract_region_counts(region_result)
-        totals_by_year[year] = _extract_total(region_result)
-
+    counts_by_year_region: Dict[int, Dict[str, int]] = {year: {} for year in years}
+    totals_by_year: Dict[int, int] = {year: 0 for year in years}
     counts_by_year_month: Dict[int, Dict[str, int]] = {year: {} for year in years}
-    for (year, month), month_result in zip(month_specs, month_results, strict=False):
+
+    for (year, month, _, _), region_result in zip(region_specs, region_results, strict=False):
+        region_counts = _extract_region_counts(region_result)
+        destination = counts_by_year_region[year]
+        for label, count in region_counts.items():
+            destination[label] = destination.get(label, 0) + count
+        total = _extract_total(region_result)
+        totals_by_year[year] += total
+        # Per-month region calls double as that month's total for the breakdown.
+        if month is not None and total > 0:
+            counts_by_year_month[year][_format_month(year, month)] = total
+
+    for (year, month, _, _), month_result in zip(month_only_specs, month_results, strict=False):
         count = _extract_total(month_result)
         if count > 0:
             counts_by_year_month[year][_format_month(year, month)] = count

@@ -158,15 +158,27 @@ def test_stats_region_call_uses_selected_month_window():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
+    body = response.json()
+
+    # A subset of months means region stats are gathered per selected month and
+    # summed — here just February — so the year total is February's, not the
+    # whole year's. The per-month region call doubles as the month total, so no
+    # separate non-region call is issued.
     region_calls = [c for c in fake.search_calls if c.get("stats") == "region"]
     assert len(region_calls) == 1
     assert region_calls[0]["published_after"] == "2024-02-01"
     assert region_calls[0]["published_before"] == "2024-03-01"
-    # Only the selected month is queried, not all twelve.
     month_calls = [c for c in fake.search_calls if c.get("stats") != "region"]
-    assert len(month_calls) == 1
+    assert len(month_calls) == 0
     # `months` must not leak to upstream as a raw filter.
     assert all("months" not in c for c in fake.search_calls)
+
+    # The month breakdown reflects only the selected month, and the year total
+    # is that month's total (2 from the fake), not a whole-year figure.
+    assert list(body["stats_by_year"]["2024"]["month"]) == [
+        {"label": "2024-02", "occurrences": 2}
+    ]
+    assert body["stats_by_year"]["2024"]["total_occurrences"] == 2
 
 
 def test_undated_search_forwards_filters_via_search_stats():

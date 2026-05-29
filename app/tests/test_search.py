@@ -329,6 +329,38 @@ def test_search_appends_skills_to_existing_query():
     assert "skills" not in fake_api.last_kwargs
 
 
+def test_search_routes_organization_number_through_employer():
+    # Upstream ignores organization-number but filters org numbers via employer.
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/search", params={"organization_number": "2021004151"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_api.last_kwargs["employer"] == "2021004151"
+    assert "organization_number" not in fake_api.last_kwargs
+
+
+def test_search_employer_name_filter_is_preserved():
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search", params={"employer": "Volvo"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_api.last_kwargs["employer"] == "Volvo"
+
+
 def test_get_ad_attaches_enriched_skills_from_text():
     fake_api = FakeAPI(
         {"id": "ad-1"},

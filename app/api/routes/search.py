@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.routes.query_utils import build_query_kwargs, fold_skills_into_query
+from app.api.routes.query_utils import (
+    build_query_kwargs,
+    fold_organization_number_into_employer,
+    fold_skills_into_query,
+)
 from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 from app.utils.config import settings
 from app.utils.date_filters import normalize_date_filters
@@ -43,7 +47,8 @@ def _to_int_count(value: Any) -> Optional[int]:
 
 def _build_search_kwargs(request: Request) -> Dict[str, Any]:
     """Convert incoming query params into keyword arguments for the API client."""
-    return fold_skills_into_query(normalize_date_filters(build_query_kwargs(request)))
+    kwargs = normalize_date_filters(build_query_kwargs(request))
+    return fold_organization_number_into_employer(fold_skills_into_query(kwargs))
 
 
 def _iter_text_fragments(value: Any, path: str = ""):

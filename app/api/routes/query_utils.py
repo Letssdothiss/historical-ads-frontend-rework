@@ -35,6 +35,28 @@ def fold_skills_into_query(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     return kwargs
 
 
+def fold_organization_number_into_employer(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Translate an organization-number filter into upstream's `employer` param.
+
+    Upstream ignores `organization_number` / `organization-number` (returns the
+    full corpus), but its `employer` param matches an exact organization number
+    as well as a free-text employer name. The UI sends one or the other (a radio
+    toggle), so when an organization number is present we route it through
+    `employer`; the exact identifier wins over any free-text name.
+    """
+    raw_org = kwargs.pop("organization_number", None)
+    if raw_org is None:
+        return kwargs
+
+    if isinstance(raw_org, list):
+        raw_org = next((value for value in raw_org if str(value).strip()), None)
+    if raw_org is None or not str(raw_org).strip():
+        return kwargs
+
+    kwargs["employer"] = str(raw_org).strip()
+    return kwargs
+
+
 def group_query_params(request: Request) -> QueryParamGroups:
     """Group repeated query keys and normalize key names to underscore format."""
     grouped_values: QueryParamGroups = {}

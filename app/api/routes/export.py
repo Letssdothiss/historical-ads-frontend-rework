@@ -8,7 +8,11 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
-from app.api.routes.query_utils import fold_skills_into_query, group_query_params
+from app.api.routes.query_utils import (
+    fold_organization_number_into_employer,
+    fold_skills_into_query,
+    group_query_params,
+)
 from app.models.schemas import ExportFormat
 from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 from app.utils.config import settings
@@ -65,8 +69,10 @@ def _build_query_kwargs(request: Request) -> Dict[str, Any]:
             continue
 
         query_kwargs[mapped_key] = parsed_value
-    # Keep export results aligned with the competency search on /search.
-    return fold_skills_into_query(normalize_date_filters(query_kwargs))
+    # Keep export results aligned with /search: competency search and the
+    # organization-number filter both need upstream-param translation.
+    normalized = fold_skills_into_query(normalize_date_filters(query_kwargs))
+    return fold_organization_number_into_employer(normalized)
 
 
 async def _iter_export_batches(

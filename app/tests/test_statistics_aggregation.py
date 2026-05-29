@@ -181,6 +181,27 @@ def test_stats_region_call_uses_selected_month_window():
     assert body["stats_by_year"]["2024"]["total_occurrences"] == 2
 
 
+def test_stats_folds_skills_into_freetext_query():
+    """Upstream ignores `skills`, so a competency search must reach upstream as
+    free-text `q` — otherwise statistics aggregate over the whole corpus."""
+    fake = FakeStatsBackendAPI()
+    app.dependency_overrides[get_api] = lambda: fake
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/stats",
+            params={"years": "2024", "skills": "python", "aggregate": "year_region"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake.search_calls
+    # Every upstream call filters by the folded query and never leaks `skills`.
+    assert all(c.get("q") == "python" for c in fake.search_calls)
+    assert all("skills" not in c for c in fake.search_calls)
+
+
 def test_undated_search_forwards_filters_via_search_stats():
     """Without a time period, filters must still reach upstream.
 

@@ -93,6 +93,6 @@ def test_stats_route_forwards_dynamic_parameters():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"stats": {"region": ["Skane"]}}
-    assert fake_api.last_kwargs["q"] == "snickare"
-    assert fake_api.last_kwargs["custom_filter"] == ["alpha", "beta"]
+    assert response.json() == {"hits": []}
+    assert fake_api.last_search_kwargs["q"] == "snickare"
+    assert fake_api.last_search_kwargs["custom_filter"] == ["alpha", "beta"]

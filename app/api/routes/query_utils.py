@@ -21,10 +21,7 @@ def group_query_params(request: Request) -> QueryParamGroups:
 
 def collapse_grouped_query_params(grouped_values: QueryParamGroups) -> QueryParamMap:
     """Collapse grouped query params to scalar values when a key occurs once."""
-    return {
-        key: values if len(values) > 1 else values[0]
-        for key, values in grouped_values.items()
-    }
+    return {key: values if len(values) > 1 else values[0] for key, values in grouped_values.items()}
 
 
 def build_query_kwargs(request: Request) -> QueryParamMap:

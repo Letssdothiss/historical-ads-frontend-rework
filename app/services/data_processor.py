@@ -63,9 +63,7 @@ class DataProcessor:
         """Extract specified fields from ads"""
         return [{f: DataProcessor.flatten(ad).get(f, "") for f in fields} for ad in ads]
 
-    def to_json(
-        self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None
-    ) -> str:
+    def to_json(self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None) -> str:
         """Export to JSON"""
         if fields:
             ads = self.extract(ads, fields)
@@ -76,9 +74,7 @@ class DataProcessor:
             default=str,
         )
 
-    def to_csv(
-        self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None
-    ) -> str:
+    def to_csv(self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None) -> str:
         """Export to CSV"""
         if not ads:
             return ""
@@ -87,9 +83,7 @@ class DataProcessor:
         df = pd.DataFrame(data)
         return df.to_csv(index=False)
 
-    def to_xlsx(
-        self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None
-    ) -> bytes:
+    def to_xlsx(self, ads: List[Dict[str, Any]], fields: Optional[List[str]] = None) -> bytes:
         """Export to Excel"""
         fields = fields or self.DEFAULT_FIELDS
         data = self.extract(ads, fields) if ads else []
@@ -107,11 +101,7 @@ class DataProcessor:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         if query:
             safe = "".join(c if c.isalnum() or c in " -_" else "" for c in query)
-            safe = (
-                safe[: DataProcessor.MAX_FILENAME_QUERY_LENGTH]
-                .strip()
-                .replace(" ", "_")
-            )
+            safe = safe[: DataProcessor.MAX_FILENAME_QUERY_LENGTH].strip().replace(" ", "_")
             return f"annonser_{safe}_{ts}.{ext}"
         return f"annonser_{ts}.{ext}"
 
@@ -167,9 +157,7 @@ class DataProcessor:
 
         total_fields, filled_fields = count_fields(ad)
         completeness = (
-            filled_fields / total_fields * DataProcessor.PERCENT_SCALE
-            if total_fields > 0
-            else 0
+            filled_fields / total_fields * DataProcessor.PERCENT_SCALE if total_fields > 0 else 0
         )
 
         return {
@@ -203,9 +191,7 @@ class DataProcessor:
         quality_scores = [
             DataProcessor.calculate_ad_quality(ad)["completeness_score"] for ad in ads
         ]
-        avg_completeness = (
-            sum(quality_scores) / len(quality_scores) if quality_scores else 0
-        )
+        avg_completeness = sum(quality_scores) / len(quality_scores) if quality_scores else 0
 
         # Extract date range
         dates = []
@@ -236,10 +222,7 @@ class DataProcessor:
                 field_stats[field]["total"] += 1
                 if value is not None and value != "":
                     field_stats[field]["filled"] += 1
-                    if (
-                        len(field_stats[field]["samples"])
-                        < DataProcessor.MAX_SAMPLE_VALUES
-                    ):
+                    if len(field_stats[field]["samples"]) < DataProcessor.MAX_SAMPLE_VALUES:
                         field_stats[field]["samples"].add(
                             str(value)[: DataProcessor.MAX_SAMPLE_VALUE_LENGTH]
                         )
@@ -258,9 +241,7 @@ class DataProcessor:
                 ),
                 "total_records": stats["total"],
                 "filled_records": stats["filled"],
-                "sample_values": list(stats["samples"])[
-                    : DataProcessor.MAX_SAMPLE_VALUES
-                ],
+                "sample_values": list(stats["samples"])[: DataProcessor.MAX_SAMPLE_VALUES],
             }
             for field, stats in sorted(field_stats.items())
         ]
@@ -269,9 +250,7 @@ class DataProcessor:
             "total_ads": total_count or len(ads),
             "date_range": date_range,
             "field_metadata": field_metadata,
-            "average_completeness": round(
-                avg_completeness, DataProcessor.ROUND_DECIMALS
-            ),
+            "average_completeness": round(avg_completeness, DataProcessor.ROUND_DECIMALS),
             "data_quality_summary": {
                 "fields_analyzed": len(field_stats),
                 "highly_complete_fields": sum(
@@ -286,16 +265,12 @@ class DataProcessor:
                 ),
                 "quality_distribution": {
                     "excellent": sum(
-                        1
-                        for s in quality_scores
-                        if s >= DataProcessor.EXCELLENT_THRESHOLD
+                        1 for s in quality_scores if s >= DataProcessor.EXCELLENT_THRESHOLD
                     ),
                     "good": sum(
                         1
                         for s in quality_scores
-                        if DataProcessor.GOOD_THRESHOLD
-                        <= s
-                        < DataProcessor.EXCELLENT_THRESHOLD
+                        if DataProcessor.GOOD_THRESHOLD <= s < DataProcessor.EXCELLENT_THRESHOLD
                     ),
                     "acceptable": sum(
                         1
@@ -305,9 +280,7 @@ class DataProcessor:
                         < DataProcessor.GOOD_THRESHOLD
                     ),
                     "poor": sum(
-                        1
-                        for s in quality_scores
-                        if s < DataProcessor.LOW_COMPLETENESS_THRESHOLD
+                        1 for s in quality_scores if s < DataProcessor.LOW_COMPLETENESS_THRESHOLD
                     ),
                 },
             },

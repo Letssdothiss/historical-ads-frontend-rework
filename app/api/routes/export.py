@@ -61,9 +61,7 @@ def _build_query_kwargs(request: Request) -> Dict[str, Any]:
 
         if key == "experience_required":
             parsed_bool = _to_bool(values[-1])
-            query_kwargs[mapped_key] = (
-                parsed_bool if parsed_bool is not None else values[-1]
-            )
+            query_kwargs[mapped_key] = parsed_bool if parsed_bool is not None else values[-1]
             continue
 
         query_kwargs[mapped_key] = parsed_value
@@ -145,9 +143,7 @@ async def export_bulk(
     part_number = 1
 
     # Write each batch as its own CSV file inside the ZIP archive.
-    with zipfile.ZipFile(
-        zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED
-    ) as archive:
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         async for ads in _iter_export_batches(api, chunk_size, **search_kwargs):
             csv_name = f"{csv_stem}_part{part_number:03d}.csv"
             archive.writestr(csv_name, processor.to_csv(ads))

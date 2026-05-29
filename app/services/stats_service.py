@@ -35,9 +35,7 @@ def _parse_years_param(params: Dict[str, Any]) -> List[int]:
 
     if "from_year" in params or "to_year" in params:
         try:
-            start = int(
-                params.get("from_year", params.get("from", datetime.utcnow().year - 4))
-            )
+            start = int(params.get("from_year", params.get("from", datetime.utcnow().year - 4)))
             end = int(params.get("to_year", params.get("to", datetime.utcnow().year)))
             if start > end:
                 start, end = end, start
@@ -162,9 +160,7 @@ async def _bounded_search(
 
 def _wants_year_breakdown(params: Dict[str, Any]) -> bool:
     aggregate = str(params.get("aggregate", "")).lower()
-    explicit_year_request = any(
-        key in params for key in ("years", "from_year", "to_year")
-    )
+    explicit_year_request = any(key in params for key in ("years", "from_year", "to_year"))
     return aggregate == "year_region" or explicit_year_request
 
 
@@ -179,9 +175,7 @@ async def _compute_total_stats(
     """
     normalized = normalize_date_filters(params)
     search_params = {
-        k: v
-        for k, v in normalized.items()
-        if k not in {"stats", "limit", "offset", "aggregate"}
+        k: v for k, v in normalized.items() if k not in {"stats", "limit", "offset", "aggregate"}
     }
     return await api.search(
         **search_params,
@@ -235,9 +229,7 @@ async def _compute_year_breakdown(
         for year in years
     ]
 
-    month_specs: List[Tuple[int, int]] = [
-        (year, month) for year in years for month in range(1, 13)
-    ]
+    month_specs: List[Tuple[int, int]] = [(year, month) for year in years for month in range(1, 13)]
     month_tasks = [
         _bounded_search(
             api,
@@ -343,18 +335,14 @@ def _shape_trend_result(
     meta_extra: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     selected_counts: Dict[int, Dict[str, int]] = {
-        year: {
-            label: counts_by_year_label.get(year, {}).get(label, 0)
-            for label in labels
-        }
+        year: {label: counts_by_year_label.get(year, {}).get(label, 0) for label in labels}
         for year in years
     }
 
     stats_by_year = {
         str(year): {
             "region": [
-                {"label": label, "occurrences": selected_counts[year][label]}
-                for label in labels
+                {"label": label, "occurrences": selected_counts[year][label]} for label in labels
             ],
             "month": [],
             "total_occurrences": sum(selected_counts[year].values()),
@@ -472,9 +460,7 @@ def _year_subwindows(year: int, slices: int) -> List[Tuple[str, str]]:
     return windows
 
 
-def _cap_per_employer(
-    documents: List[Dict[str, str]], cap: int
-) -> List[Dict[str, str]]:
+def _cap_per_employer(documents: List[Dict[str, str]], cap: int) -> List[Dict[str, str]]:
     if cap <= 0:
         return documents
     kept: List[Dict[str, str]] = []
@@ -534,9 +520,7 @@ async def _sample_competency_counts(
 
     window_results = await asyncio.gather(
         *[
-            _fetch_window_documents(
-                api, semaphore, base_params, after, before, per_window
-            )
+            _fetch_window_documents(api, semaphore, base_params, after, before, per_window)
             for after, before in windows
         ]
     )
@@ -569,9 +553,7 @@ async def _run_skills_trend(
     params: Dict[str, Any],
 ) -> Dict[str, Any]:
     years = sorted(set(_parse_years_param(params)))[: settings.STATS_MAX_YEAR_CALLS]
-    base_params = {
-        k: v for k, v in params.items() if k not in _trend_excluded_params()
-    }
+    base_params = {k: v for k, v in params.items() if k not in _trend_excluded_params()}
 
     semaphore = asyncio.Semaphore(settings.STATS_UPSTREAM_CONCURRENCY)
     results = await asyncio.gather(
@@ -627,9 +609,7 @@ async def _run_trend_aggregation(
         years = [anchor - 1, anchor]
     years = sorted(set(years))[: settings.STATS_MAX_YEAR_CALLS]
 
-    base_params = {
-        k: v for k, v in params.items() if k not in _trend_excluded_params()
-    }
+    base_params = {k: v for k, v in params.items() if k not in _trend_excluded_params()}
 
     semaphore = asyncio.Semaphore(settings.STATS_UPSTREAM_CONCURRENCY)
     tasks = [

@@ -1,13 +1,17 @@
 """Search routes"""
 
+import logging
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.routes.query_utils import build_query_kwargs
+from app.api.routes.query_utils import build_query_kwargs, fold_skills_into_query
 from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
+from app.utils.config import settings
 from app.utils.date_filters import normalize_date_filters
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Search"])
 
@@ -39,7 +43,7 @@ def _to_int_count(value: Any) -> Optional[int]:
 
 def _build_search_kwargs(request: Request) -> Dict[str, Any]:
     """Convert incoming query params into keyword arguments for the API client."""
-    return normalize_date_filters(build_query_kwargs(request))
+    return fold_skills_into_query(normalize_date_filters(build_query_kwargs(request)))
 
 
 def _iter_text_fragments(value: Any, path: str = ""):
@@ -161,6 +165,92 @@ def _match_query_context(hit: Dict[str, Any], query: str, limit: int = 20) -> li
     return [item[3] for item in ranked_matches[:limit]]
 
 
+def _ad_enrichment_document(ad: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Build an enrichments-API document from an ad's headline and body text."""
+    description = ad.get("description")
+    if isinstance(description, dict):
+        text = description.get("text") or ""
+    else:
+        text = description or ""
+    headline = ad.get("headline") or ad.get("title") or ""
+
+    text = str(text).strip()
+    headline = str(headline).strip()
+    if not text and not headline:
+        return None
+
+    return {
+        "doc_id": str(ad.get("id") or "ad"),
+        "doc_headline": headline,
+        "doc_text": text,
+    }
+
+
+def _extract_enriched_skills(enriched: Any, min_prediction: float) -> List[Dict[str, Any]]:
+    """Pull deduped competency labels out of an enrichments API response.
+
+    Historical ads rarely carry structured must_have/nice_to_have skills, so
+    we derive them from the ad text the same way the skills trend does.
+    """
+    if not isinstance(enriched, list):
+        return []
+
+    skills: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for doc in enriched:
+        if not isinstance(doc, dict):
+            continue
+        candidates = (doc.get("enriched_candidates") or {}).get("competencies") or []
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            try:
+                prediction = float(candidate.get("prediction", 0))
+            except (TypeError, ValueError):
+                prediction = 0.0
+            if prediction < min_prediction:
+                continue
+            label = candidate.get("concept_label") or candidate.get("term")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            key = label.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            skills.append({"label": label.strip(), "prediction": round(prediction, 3)})
+
+    skills.sort(key=lambda item: item["prediction"], reverse=True)
+    return skills
+
+
+async def _attach_enriched_skills(ad: Dict[str, Any], api: HistoricalAdsAPI) -> Dict[str, Any]:
+    """Best-effort: derive competencies from the ad text and attach them.
+
+    Failures (network, unexpected upstream shape) are swallowed so the ad
+    detail still renders without enriched skills.
+    """
+    document = _ad_enrichment_document(ad)
+    if document is None:
+        return ad
+
+    try:
+        enriched = await api.enrich_documents([document])
+    except Exception:  # noqa: BLE001 - enrichment is optional, never fatal
+        logger.warning("Ad enrichment failed for id %s", ad.get("id"), exc_info=True)
+        return ad
+
+    skills = _extract_enriched_skills(enriched, settings.AD_DETAIL_ENRICHMENT_MIN_PREDICTION)
+    if not skills:
+        return ad
+
+    enriched_ad = dict(ad)
+    existing = enriched_ad.get("enriched")
+    group = dict(existing) if isinstance(existing, dict) else {}
+    group["skills"] = skills
+    enriched_ad["enriched"] = group
+    return enriched_ad
+
+
 @router.get("/search")
 async def search(
     request: Request,
@@ -216,16 +306,23 @@ async def get_ad(
     api: HistoricalAdsAPI = Depends(get_api),
     processor: DataProcessor = Depends(get_processor),
     include_metadata: bool = Query(True, description="Include quality metadata in response"),
+    enrich: bool = Query(True, description="Derive competencies from the ad text"),
 ) -> Dict[str, Any]:
     """Get specific job ad with optional quality metadata
 
     Query parameters:
     - include_metadata: Include data quality and structure information (default: true)
+    - enrich: Derive competencies from the ad text via the enrichments API (default: true)
     """
     ad = await api.get_ad(ad_id)
 
+    # Compute quality on the raw upstream ad so derived skills don't inflate it.
+    quality_metadata = processor.calculate_ad_quality(ad) if include_metadata else None
+
+    if enrich and isinstance(ad, dict):
+        ad = await _attach_enriched_skills(ad, api)
+
     if include_metadata:
-        quality_metadata = processor.calculate_ad_quality(ad)
         # Preserve the ad's top-level shape (so `id` stays at root) and attach metadata
         if isinstance(ad, dict):
             enriched = _ensure_original_id(ad)

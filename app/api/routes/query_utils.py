@@ -2,12 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import Request
 
 QueryParamGroups = Dict[str, list[str]]
 QueryParamMap = Dict[str, str | list[str]]
+
+
+def fold_skills_into_query(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Translate the competency search into upstream free-text.
+
+    Upstream has no usable structured skill filter: its `skills` param is
+    ignored (returns the full corpus) and `skill` expects taxonomy concept ids,
+    not the free-text labels the competency field sends. So we fold the skill
+    terms into the free-text `q` query, which matches headline + description —
+    the same text the enrichments API derives competencies from, and which also
+    contains the must-have / nice-to-have labels printed in the ad body.
+    Upstream OR-matches space-separated terms, giving broad recall.
+    """
+    raw_skills = kwargs.pop("skills", None)
+    if raw_skills is None:
+        return kwargs
+
+    skill_list = raw_skills if isinstance(raw_skills, list) else [raw_skills]
+    terms = [str(term).strip() for term in skill_list if str(term).strip()]
+    if not terms:
+        return kwargs
+
+    existing_q = str(kwargs.get("q", "")).strip()
+    kwargs["q"] = " ".join([existing_q, *terms]) if existing_q else " ".join(terms)
+    return kwargs
 
 
 def group_query_params(request: Request) -> QueryParamGroups:

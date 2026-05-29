@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Only count a competency for an ad when the model is at least this sure
     # the employer actually requested it.
     SKILLS_TREND_MIN_PREDICTION: float = 0.5
+    # Minimum model confidence for a competency to be shown on the ad detail
+    # page when derived from the ad text via the enrichments API.
+    AD_DETAIL_ENRICHMENT_MIN_PREDICTION: float = 0.5
 
     model_config = cast(SettingsConfigDict, ConfigDict(extra="allow"))
 

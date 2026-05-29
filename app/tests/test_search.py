@@ -11,10 +11,17 @@ from app.services import get_api
 class FakeAPI:
     """Simple async API stub for route tests."""
 
-    def __init__(self, payload: dict[str, Any], ad_payload: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        ad_payload: dict[str, Any] | None = None,
+        enrich_payload: Any = None,
+    ):
         self.payload = payload
         self.ad_payload = ad_payload
+        self.enrich_payload = enrich_payload if enrich_payload is not None else []
         self.last_kwargs: dict[str, Any] = {}
+        self.enrich_documents_calls: list[Any] = []
 
     async def search(self, **kwargs: Any) -> dict[str, Any]:
         self.last_kwargs = kwargs
@@ -24,6 +31,10 @@ class FakeAPI:
         if self.ad_payload is not None:
             return self.ad_payload
         return {"id": ad_id}
+
+    async def enrich_documents(self, documents: Any) -> Any:
+        self.enrich_documents_calls.append(documents)
+        return self.enrich_payload
 
 
 def test_search_free_text_returns_hits_and_count():
@@ -279,6 +290,95 @@ def test_get_ad_exposes_original_id_to_frontend():
     assert response.status_code == 200
     body = response.json()
     assert body["original_id"] == "30429400"
+
+
+def test_search_folds_skills_into_free_text_query():
+    # Upstream ignores the structured skills filter, so the competency search
+    # must be folded into the free-text q query (terms OR-matched upstream).
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    params = (("skills", "python"), ("skills", "java"))
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search", params=params)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_api.last_kwargs["q"] == "python java"
+    # The raw skills key is consumed, not forwarded (upstream ignores it).
+    assert "skills" not in fake_api.last_kwargs
+
+
+def test_search_appends_skills_to_existing_query():
+    fake_api = FakeAPI({"hits": [], "total": 0})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    params = (("q", "göteborg"), ("skills", "snickare"))
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search", params=params)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_api.last_kwargs["q"] == "göteborg snickare"
+    assert "skills" not in fake_api.last_kwargs
+
+
+def test_get_ad_attaches_enriched_skills_from_text():
+    fake_api = FakeAPI(
+        {"id": "ad-1"},
+        ad_payload={
+            "id": "ad-1",
+            "headline": "Snickare sökes",
+            "description": {"text": "Vi söker en erfaren snickare med truckkort."},
+        },
+        enrich_payload=[
+            {
+                "enriched_candidates": {
+                    "competencies": [
+                        {"concept_label": "Snickeri", "prediction": 0.91},
+                        {"concept_label": "Truckkort", "prediction": 0.72},
+                        {"concept_label": "Osäker kompetens", "prediction": 0.2},
+                    ]
+                }
+            }
+        ],
+    )
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search/ad/ad-1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    labels = [skill["label"] for skill in body["enriched"]["skills"]]
+    # High-confidence competencies are kept and ordered by prediction;
+    # the low-confidence one is filtered out.
+    assert labels == ["Snickeri", "Truckkort"]
+    assert fake_api.enrich_documents_calls
+
+
+def test_get_ad_without_text_skips_enrichment():
+    fake_api = FakeAPI({"id": "ad-2"}, ad_payload={"id": "ad-2"})
+    app.dependency_overrides[get_api] = lambda: fake_api
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/search/ad/ad-2")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "enriched" not in response.json()
+    assert fake_api.enrich_documents_calls == []
 
 
 def test_search_translates_from_year_to_year_into_inclusive_range():

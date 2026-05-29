@@ -4,7 +4,13 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import get_api
-from app.services.stats_service import _cap_per_employer, _year_subwindows
+from app.services.stats_service import (
+    _cap_per_employer,
+    _parse_months_by_year,
+    _selected_months,
+    _year_subwindows,
+    _year_window,
+)
 
 
 class FakeStatsBackendAPI:
@@ -114,6 +120,53 @@ def test_backend_year_month_aggregation_uses_upstream_stats():
     assert rows["Skåne län"]["2024"] == 0
     assert rows["Skåne län"]["2025"] == 1
     assert rows["Skåne län"]["totalt"] == 1
+
+
+def test_year_window_narrows_to_selected_month():
+    by_year, bare = _parse_months_by_year({"months": "2026-01"})
+    assert by_year == {2026: {1}}
+    assert bare == []
+    # January only: published-after start of Jan, published-before start of Feb.
+    assert _year_window(2026, by_year, bare) == ("2026-01-01", "2026-02-01")
+    assert _selected_months(2026, by_year, bare) == [1]
+
+
+def test_year_window_collapses_disjoint_months_to_tightest_span():
+    by_year, bare = _parse_months_by_year({"months": ["2026-01", "2026-03"]})
+    assert by_year == {2026: {1, 3}}
+    # Jan + Mar -> Jan 1 .. Apr 1 (single upstream range), both months queried.
+    assert _year_window(2026, by_year, bare) == ("2026-01-01", "2026-04-01")
+    assert _selected_months(2026, by_year, bare) == [1, 3]
+
+
+def test_year_window_defaults_to_whole_year_without_months():
+    by_year, bare = _parse_months_by_year({})
+    assert _year_window(2026, by_year, bare) == ("2026-01-01", "2027-01-01")
+    assert _selected_months(2026, by_year, bare) == list(range(1, 13))
+
+
+def test_stats_region_call_uses_selected_month_window():
+    fake = FakeStatsBackendAPI()
+    app.dependency_overrides[get_api] = lambda: fake
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/stats",
+            params={"years": "2024", "months": "2024-02", "aggregate": "year_region"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    region_calls = [c for c in fake.search_calls if c.get("stats") == "region"]
+    assert len(region_calls) == 1
+    assert region_calls[0]["published_after"] == "2024-02-01"
+    assert region_calls[0]["published_before"] == "2024-03-01"
+    # Only the selected month is queried, not all twelve.
+    month_calls = [c for c in fake.search_calls if c.get("stats") != "region"]
+    assert len(month_calls) == 1
+    # `months` must not leak to upstream as a raw filter.
+    assert all("months" not in c for c in fake.search_calls)
 
 
 def test_undated_search_forwards_filters_via_search_stats():

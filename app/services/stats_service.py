@@ -8,6 +8,7 @@ occupation/skills trends. No FastAPI / HTTP concerns live here.
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Set, Tuple
 
@@ -46,6 +47,50 @@ def _parse_years_param(params: Dict[str, Any]) -> List[int]:
     now = datetime.utcnow().year
     default_span = settings.STATS_MAX_YEAR_CALLS
     return list(range(now - default_span + 1, now + 1))
+
+
+def _parse_months_by_year(params: Dict[str, Any]) -> Tuple[Dict[int, Set[int]], List[int]]:
+    """Read the `months` filter into a per-year month map plus bare months.
+
+    The frontend sends months year-qualified (``"2026-01"``) so each month stays
+    tied to its year. Bare month numbers (``"3"``) are also accepted and apply to
+    every selected year. Returns ``({year: {month, ...}}, [bare_month, ...])``.
+    """
+    raw = params.get("months")
+    if raw is None:
+        return {}, []
+
+    values = raw if isinstance(raw, list) else [raw]
+    by_year: Dict[int, Set[int]] = {}
+    bare: List[int] = []
+    for entry in values:
+        text = str(entry).strip()
+        qualified = re.fullmatch(r"(\d{4})-(\d{1,2})", text)
+        if qualified:
+            month = int(qualified.group(2))
+            if 1 <= month <= 12:
+                by_year.setdefault(int(qualified.group(1)), set()).add(month)
+        elif text.isdigit() and 1 <= int(text) <= 12:
+            bare.append(int(text))
+    return by_year, bare
+
+
+def _selected_months(year: int, months_by_year: Dict[int, Set[int]], bare: List[int]) -> List[int]:
+    """Months chosen for a given year, or all 12 when none were selected."""
+    selected = months_by_year.get(year) or set(bare)
+    return sorted(selected) if selected else list(range(1, 13))
+
+
+def _year_window(year: int, months_by_year: Dict[int, Set[int]], bare: List[int]) -> Tuple[str, str]:
+    """published-after / published-before for a year, narrowed to its selected
+    months. Disjoint months collapse to the tightest covering span (upstream
+    only accepts one range); no selection means the whole year."""
+    months = sorted(months_by_year.get(year) or set(bare))
+    if not months:
+        return f"{year:04d}-01-01", f"{year + 1:04d}-01-01"
+    after = f"{year:04d}-{min(months):02d}-01"
+    next_year, next_month = _next_month(year, max(months))
+    return after, f"{next_year:04d}-{next_month:02d}-01"
 
 
 def _format_month(year: int, month: int) -> str:
@@ -175,7 +220,9 @@ async def _compute_total_stats(
     """
     normalized = normalize_date_filters(params)
     search_params = {
-        k: v for k, v in normalized.items() if k not in {"stats", "limit", "offset", "aggregate"}
+        k: v
+        for k, v in normalized.items()
+        if k not in {"stats", "limit", "offset", "aggregate", "months"}
     }
     return await api.search(
         **search_params,
@@ -204,6 +251,7 @@ async def _compute_year_breakdown(
         "to_year",
         "year",
         "month",
+        "months",
         "aggregate",
         "offset",
         "limit",
@@ -213,23 +261,31 @@ async def _compute_year_breakdown(
     }
     base_params = {k: v for k, v in params.items() if k not in excluded}
 
+    months_by_year, bare_months = _parse_months_by_year(params)
+
     semaphore = asyncio.Semaphore(settings.STATS_UPSTREAM_CONCURRENCY)
 
-    region_tasks = [
-        _bounded_search(
-            api,
-            semaphore,
-            **base_params,
-            stats="region",
-            stats_limit=30,
-            limit=0,
-            published_after=f"{year:04d}-01-01",
-            published_before=f"{year + 1:04d}-01-01",
+    region_tasks = []
+    for year in years:
+        after, before = _year_window(year, months_by_year, bare_months)
+        region_tasks.append(
+            _bounded_search(
+                api,
+                semaphore,
+                **base_params,
+                stats="region",
+                stats_limit=30,
+                limit=0,
+                published_after=after,
+                published_before=before,
+            )
         )
-        for year in years
-    ]
 
-    month_specs: List[Tuple[int, int]] = [(year, month) for year in years for month in range(1, 13)]
+    month_specs: List[Tuple[int, int]] = [
+        (year, month)
+        for year in years
+        for month in _selected_months(year, months_by_year, bare_months)
+    ]
     month_tasks = [
         _bounded_search(
             api,
@@ -376,6 +432,7 @@ def _trend_excluded_params() -> Set[str]:
         "to_year",
         "year",
         "month",
+        "months",
         "aggregate",
         "offset",
         "limit",

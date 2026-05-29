@@ -2,9 +2,9 @@
 
 from fastapi.testclient import TestClient
 
-from app.api.routes.statistics import _cap_per_employer, _year_subwindows
 from app.main import app
 from app.services import get_api
+from app.services.stats_service import _cap_per_employer, _year_subwindows
 
 
 class FakeStatsBackendAPI:

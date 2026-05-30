@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 
+from app.common.schemas.schemas import SharedSearchCreate
 from app.common.utils.config import settings
 from app.v1.services import HistoricalAdsAPI, get_api
 from app.v1.services.search_persistence import append_record, get_record, new_id, now_iso
@@ -14,13 +14,6 @@ from app.v1.services.search_persistence import append_record, get_record, new_id
 SHARED_SEARCHES_COLLECTION = "shared_searches.json"
 
 router = APIRouter(tags=["Shared Searches"])
-
-
-class SharedSearchCreate(BaseModel):
-    """Payload for creating a shareable search."""
-
-    name: Optional[str] = None
-    filters: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/shared-searches")

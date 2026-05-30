@@ -35,7 +35,7 @@ class SearchQuery(BaseModel):
 class ExportQuery(BaseModel):
     """Export query parameters"""
 
-    search: SearchQuery = Field(default_factory=SearchQuery) # type: ignore[call-arg]
+    search: SearchQuery = Field(default_factory=SearchQuery)  # type: ignore[call-arg]
     format: ExportFormat = Field(ExportFormat.JSON, description="Export format")
     fields: Optional[List[str]] = Field(None, description="Fields to export")
 
@@ -70,3 +70,18 @@ class DatabaseMetadata(BaseModel):
     average_completeness: float = Field(ge=0, le=100, description="Average field completeness")
     data_quality_summary: Dict[str, Any] = Field(description="Summary of data quality issues")
     last_updated: str = Field(description="Last database update timestamp")
+
+
+class SavedSearchCreate(BaseModel):
+    """Payload for storing a search definition."""
+
+    name: str = Field(min_length=1)
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    description: Optional[str] = None
+
+
+class SharedSearchCreate(BaseModel):
+    """Payload for creating a shareable search."""
+
+    name: Optional[str] = None
+    filters: Dict[str, Any] = Field(default_factory=dict)

@@ -5,7 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import get_api
+from app.v1.services import get_api
 
 
 class FakeAPI:
@@ -336,9 +336,7 @@ def test_search_routes_organization_number_through_employer():
 
     try:
         client = TestClient(app)
-        response = client.get(
-            "/api/v1/search", params={"organization_number": "2021004151"}
-        )
+        response = client.get("/api/v1/search", params={"organization_number": "2021004151"})
     finally:
         app.dependency_overrides.clear()
 

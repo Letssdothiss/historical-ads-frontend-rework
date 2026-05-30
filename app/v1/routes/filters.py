@@ -4,8 +4,8 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Request
 
-from app.api.routes.query_utils import build_query_kwargs
-from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
+from app.v1.routes.query_utils import build_query_kwargs
+from app.v1.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 
 router = APIRouter(tags=["Filters"])
 

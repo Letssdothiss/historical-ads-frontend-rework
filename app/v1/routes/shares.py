@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request
 
-from app.utils.config import settings
+from app.common.utils.config import settings
 
 router = APIRouter(tags=["Shares"])
 

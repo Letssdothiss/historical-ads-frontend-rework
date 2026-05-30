@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 
-from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
+from app.v1.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Metadata"])

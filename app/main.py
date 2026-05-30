@@ -8,9 +8,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import api_router
-from app.utils.config import settings
-from app.utils.errors import AppError
+from app.common.utils.config import settings
+from app.common.utils.errors import AppError
+from app.v1.routes import api_router
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,

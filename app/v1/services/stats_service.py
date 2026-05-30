@@ -12,9 +12,9 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Set, Tuple
 
-from app.services.external_api import HistoricalAdsAPI
-from app.utils.config import settings
-from app.utils.date_filters import normalize_date_filters
+from app.common.utils.config import settings
+from app.common.utils.date_filters import normalize_date_filters
+from app.v1.services.external_api import HistoricalAdsAPI
 
 # Trend types map to an upstream `stats` aggregation field. Skills have no
 # upstream stats aggregation, so that trend is computed by sampling ad texts.
@@ -81,7 +81,9 @@ def _selected_months(year: int, months_by_year: Dict[int, Set[int]], bare: List[
     return sorted(selected) if selected else list(range(1, 13))
 
 
-def _year_window(year: int, months_by_year: Dict[int, Set[int]], bare: List[int]) -> Tuple[str, str]:
+def _year_window(
+    year: int, months_by_year: Dict[int, Set[int]], bare: List[int]
+) -> Tuple[str, str]:
     """published-after / published-before for a year, narrowed to its selected
     months. Disjoint months collapse to the tightest covering span (upstream
     only accepts one range); no selection means the whole year."""

@@ -5,19 +5,19 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.routes.query_utils import (
+from app.common.utils.date_filters import normalize_date_filters
+from app.v1.routes.query_utils import (
     build_query_kwargs,
     fold_organization_number_into_employer,
     fold_skills_into_query,
 )
-from app.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
-from app.services.search_service import (
+from app.v1.services import DataProcessor, HistoricalAdsAPI, get_api, get_processor
+from app.v1.services.search_service import (
     attach_enriched_skills,
     ensure_original_id,
     normalize_limit,
     process_search_result,
 )
-from app.utils.date_filters import normalize_date_filters
 
 logger = logging.getLogger(__name__)
 

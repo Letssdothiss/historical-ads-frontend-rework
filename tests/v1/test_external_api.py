@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.services.external_api import HistoricalAdsAPI
-from app.utils.errors import ExternalAPIError
+from app.common.utils.errors import ExternalAPIError
+from app.v1.services.external_api import HistoricalAdsAPI
 
 
 @pytest.mark.asyncio

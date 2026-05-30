@@ -8,8 +8,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.routes.query_utils import build_query_kwargs
-from app.services import HistoricalAdsAPI, get_api
+from app.v1.routes.query_utils import build_query_kwargs
+from app.v1.services import HistoricalAdsAPI, get_api
 
 router = APIRouter(tags=["Related Occupations"])
 

@@ -7,9 +7,9 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services import HistoricalAdsAPI, get_api
-from app.services.search_persistence import append_record, get_record, new_id, now_iso
-from app.utils.config import settings
+from app.common.utils.config import settings
+from app.v1.services import HistoricalAdsAPI, get_api
+from app.v1.services.search_persistence import append_record, get_record, new_id, now_iso
 
 SHARED_SEARCHES_COLLECTION = "shared_searches.json"
 

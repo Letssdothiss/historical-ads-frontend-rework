@@ -5,9 +5,9 @@ import zipfile
 
 from fastapi.testclient import TestClient
 
+from app.common.utils.config import settings
 from app.main import app
-from app.services import get_api
-from app.utils.config import settings
+from app.v1.services import get_api
 
 
 class FakeBulkAPI:

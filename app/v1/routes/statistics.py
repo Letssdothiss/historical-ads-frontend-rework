@@ -6,12 +6,12 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Request
 
-from app.api.routes.query_utils import (
+from app.v1.routes.query_utils import (
     build_query_kwargs,
     fold_organization_number_into_employer,
     fold_skills_into_query,
 )
-from app.services import HistoricalAdsAPI, get_api, stats_service
+from app.v1.services import HistoricalAdsAPI, get_api, stats_service
 
 router = APIRouter(tags=["Statistics"])
 

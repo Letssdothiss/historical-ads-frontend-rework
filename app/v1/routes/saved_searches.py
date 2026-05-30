@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.search_persistence import (
+from app.v1.services.search_persistence import (
     append_record,
     get_record,
     load_collection,

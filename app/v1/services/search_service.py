@@ -6,8 +6,8 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from app.services import HistoricalAdsAPI
-from app.utils.config import settings
+from app.common.utils.config import settings
+from app.v1.services import HistoricalAdsAPI
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +169,14 @@ def match_query_context(
         score, matched, text_len = fragment_score(path, text, terms)
         if score <= 0:
             continue
-        ranked.append((
-            score,
-            matched,
-            -text_len,
-            {"path": path, "value": text, "score": score, "matched_terms": matched},
-        ))
+        ranked.append(
+            (
+                score,
+                matched,
+                -text_len,
+                {"path": path, "value": text, "score": score, "matched_terms": matched},
+            )
+        )
 
     ranked.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
     return [item[3] for item in ranked[:limit]]

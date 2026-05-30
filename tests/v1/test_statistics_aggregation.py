@@ -3,8 +3,8 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import get_api
-from app.services.stats_service import (
+from app.v1.services import get_api
+from app.v1.services.stats_service import (
     _cap_per_employer,
     _parse_months_by_year,
     _selected_months,
@@ -175,9 +175,7 @@ def test_stats_region_call_uses_selected_month_window():
 
     # The month breakdown reflects only the selected month, and the year total
     # is that month's total (2 from the fake), not a whole-year figure.
-    assert list(body["stats_by_year"]["2024"]["month"]) == [
-        {"label": "2024-02", "occurrences": 2}
-    ]
+    assert list(body["stats_by_year"]["2024"]["month"]) == [{"label": "2024-02", "occurrences": 2}]
     assert body["stats_by_year"]["2024"]["total_occurrences"] == 2
 
 

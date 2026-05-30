@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from app.utils.config import settings
-from app.utils.errors import (
+from app.common.utils.config import settings
+from app.common.utils.errors import (
     AppError,
     ConflictError,
     ExternalAPIError,

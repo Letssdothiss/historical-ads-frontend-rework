@@ -1,4 +1,5 @@
 """Models module"""
+
 from .responses import (
     ErrorResponse,
     FiltersResult,

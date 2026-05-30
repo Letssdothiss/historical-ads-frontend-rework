@@ -6,7 +6,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.common.utils.date_filters import normalize_date_filters
-from app.v1.routes.query_utils import (
+from app.common.utils.query_utils import (
     build_query_kwargs,
     fold_organization_number_into_employer,
     fold_skills_into_query,

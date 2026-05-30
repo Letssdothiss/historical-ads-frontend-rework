@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.common.schemas.schemas import SavedSearchCreate
 from app.v1.services.search_persistence import (
     append_record,
     get_record,
@@ -18,14 +19,6 @@ from app.v1.services.search_persistence import (
 SAVED_SEARCHES_COLLECTION = "saved_searches.json"
 
 router = APIRouter(tags=["Saved Searches"])
-
-
-class SavedSearchCreate(BaseModel):
-    """Payload for storing a search definition."""
-
-    name: str = Field(min_length=1)
-    filters: Dict[str, Any] = Field(default_factory=dict)
-    description: Optional[str] = None
 
 
 @router.post("/saved-searches")

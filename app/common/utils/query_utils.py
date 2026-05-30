@@ -2,12 +2,38 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import Request
 
+from app.common.utils.date_filters import normalize_date_filters
+
 QueryParamGroups = Dict[str, list[str]]
 QueryParamMap = Dict[str, str | list[str]]
+
+DATE_FILTER_ALIASES = {
+    "from": "published_after",
+    "to": "published_before",
+    "from_date": "published_after",
+    "to_date": "published_before",
+    "start_date": "published_after",
+    "end_date": "published_before",
+    "date_from": "published_after",
+    "date_to": "published_before",
+    "published_from": "published_after",
+    "published_to": "published_before",
+}
+
+EXCLUDED_EXPORT_QUERY_KEYS = {"format", "fields"}
+
+
+def _to_bool(value: str) -> Optional[bool]:
+    text = value.strip().lower()
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
 
 
 def fold_skills_into_query(kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -74,3 +100,28 @@ def collapse_grouped_query_params(grouped_values: QueryParamGroups) -> QueryPara
 def build_query_kwargs(request: Request) -> QueryParamMap:
     """Convert request query params into route kwargs, preserving repeated keys."""
     return collapse_grouped_query_params(group_query_params(request))
+
+
+def build_export_query_kwargs(request: Request) -> Dict[str, Any]:
+    """Convert export request query params, resolving date aliases and bool coercion."""
+    grouped_values = group_query_params(request)
+
+    query_kwargs: Dict[str, Any] = {}
+    for key, values in grouped_values.items():
+        if key in EXCLUDED_EXPORT_QUERY_KEYS:
+            continue
+
+        mapped_key = DATE_FILTER_ALIASES.get(key, key)
+
+        if mapped_key in query_kwargs and key != mapped_key:
+            continue
+
+        if key == "experience_required":
+            parsed_bool = _to_bool(values[-1])
+            query_kwargs[mapped_key] = parsed_bool if parsed_bool is not None else values[-1]
+            continue
+
+        query_kwargs[mapped_key] = values if len(values) > 1 else values[0]
+
+    normalized = fold_skills_into_query(normalize_date_filters(query_kwargs))
+    return fold_organization_number_into_employer(normalized)

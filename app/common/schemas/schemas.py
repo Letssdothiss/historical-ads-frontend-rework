@@ -35,7 +35,7 @@ class SearchQuery(BaseModel):
 class ExportQuery(BaseModel):
     """Export query parameters"""
 
-    search: SearchQuery = Field(default_factory=SearchQuery)
+    search: SearchQuery = Field(default_factory=SearchQuery) # type: ignore[call-arg]
     format: ExportFormat = Field(ExportFormat.JSON, description="Export format")
     fields: Optional[List[str]] = Field(None, description="Fields to export")
 

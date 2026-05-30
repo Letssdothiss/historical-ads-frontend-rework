@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
-from app.common.models.schemas import ExportFormat
+from app.common.schemas.schemas import ExportFormat
 from app.common.utils.config import settings
 from app.common.utils.date_filters import normalize_date_filters
 from app.v1.routes.query_utils import (

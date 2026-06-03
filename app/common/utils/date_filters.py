@@ -8,6 +8,7 @@ upstream, so this helper converts them before the request is forwarded.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -79,5 +80,8 @@ def normalize_date_filters(params: Dict[str, Any]) -> Dict[str, Any]:
         params["published_after"] = after
     if before is not None and "published_before" not in params:
         params["published_before"] = before
+
+    params.setdefault("published_after", "2023-01-01")
+    params.setdefault("published_before", date.today().strftime("%Y-%m-%d"))
 
     return params
